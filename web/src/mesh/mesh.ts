@@ -45,6 +45,19 @@ export class Mesh {
     return [...this.links.values()].map((l) => ({ peerId: l.peerId, name: l.name, state: l.state }));
   }
 
+  /** Empfangene Audio-Bytes je Peer, für Diagnose und Tests. */
+  async bytesReceived(): Promise<Record<string, number>> {
+    const out: Record<string, number> = {};
+    for (const [id, link] of this.links) {
+      let sum = 0;
+      (await link.getStats()).forEach((r) => {
+        if (r.type === 'inbound-rtp' && r.kind === 'audio') sum += r.bytesReceived ?? 0;
+      });
+      out[id] = sum;
+    }
+    return out;
+  }
+
   leave(): void {
     this.o.signaling.send('bye', '*', {});
     for (const id of [...this.links.keys()]) this.remove(id);

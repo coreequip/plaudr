@@ -17,6 +17,7 @@ export interface PeerLinkLike {
   name: string;
   readonly state: RTCPeerConnectionState;
   handle(p: Payload): Promise<void>;
+  getStats(): Promise<RTCStatsReport>;
   close(): void;
 }
 
@@ -84,6 +85,10 @@ export class PeerLink implements PeerLinkLike {
   handle(p: Payload): Promise<void> {
     this.queue = this.queue.then(() => this.process(p)).catch((err) => console.warn('[plaudr] Signaling-Fehler', err));
     return this.queue;
+  }
+
+  getStats(): Promise<RTCStatsReport> {
+    return this.pc.getStats();
   }
 
   close(): void {

@@ -6,7 +6,37 @@
     <title>plaudr</title>
   </head>
   <body>
-    <main id="app"></main>
+    <main>
+      <h1>plaudr</h1>
+      <p class="warn">Testversion (M1): Das Signaling ist noch nicht verschlüsselt.</p>
+
+      <section id="start" hidden>
+        <p>Sprachraum für kleine Runden. Wer den Link hat, ist dabei.</p>
+        <button id="create" class="primary">Neuen Raum erstellen</button>
+      </section>
+
+      <section id="lobby" hidden>
+        <label for="name">Dein Name</label>
+        <input id="name" maxlength="40" autocomplete="nickname" />
+        <button id="join" class="primary">Beitreten</button>
+      </section>
+
+      <section id="call" hidden>
+        <div class="row">
+          <input id="link" readonly aria-label="Einladungslink" />
+          <button id="copy">Link kopieren</button>
+        </div>
+        <p id="notice" hidden></p>
+        <button id="unmute-audio" class="primary" hidden>Ton aktivieren</button>
+        <ul id="peers"></ul>
+        <p id="alone">Noch niemand da. Schick den Link herum.</p>
+        <div class="row">
+          <button id="mute">Stumm</button>
+          <button id="leave">Verlassen</button>
+        </div>
+        <div id="audio" hidden></div>
+      </section>
+    </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
