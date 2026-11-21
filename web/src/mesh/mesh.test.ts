@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { Mesh, type SignalingLike } from './mesh';
 import type { PeerLinkLike, PeerLinkOptions } from './peer-link';
 import type { Bodies, Kind, Payload } from '../signaling/types';
@@ -101,15 +101,43 @@ describe('hello', () => {
 });
 
 describe('Abbau', () => {
-  test('leave der alten cid nach Reconnect lässt den Link bestehen, leave der neuen schließt ihn', () => {
-    hello('B', 'c-old');
-    hello('B', 'c-new');
-    sig.leave.forEach((cb) => cb('c-old'));
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const leave = (cid: string) => sig.leave.forEach((cb) => cb(cid));
+
+  test('member_leave schließt erst nach 5 s Gnadenfrist', () => {
+    hello('B', 'c-b');
+    leave('c-b');
+    vi.advanceTimersByTime(4999);
     expect(live('B')).toHaveLength(1);
-    sig.leave.forEach((cb) => cb('c-new'));
+    vi.advanceTimersByTime(1);
     expect(live('B')).toHaveLength(0);
     expect(gone).toEqual(['B']);
     expect(mesh.peers()).toEqual([]);
+  });
+  test('Reconnect innerhalb der Frist (leave alt, dann hello neu) behält den Link', () => {
+    hello('B', 'c-old');
+    leave('c-old');
+    vi.advanceTimersByTime(600);
+    hello('B', 'c-new');
+    vi.advanceTimersByTime(10_000);
+    expect(linksFor('B')).toHaveLength(1);
+    expect(live('B')).toHaveLength(1);
+    expect(gone).toEqual([]);
+  });
+  test('leave einer fremden cid lässt den Link in Ruhe', () => {
+    hello('B', 'c-new');
+    leave('c-old');
+    vi.advanceTimersByTime(10_000);
+    expect(live('B')).toHaveLength(1);
+  });
+  test('bye während der Frist schließt sofort', () => {
+    hello('B', 'c-b');
+    leave('c-b');
+    sig.emitMsg({ kind: 'bye', from: 'B', cid: 'c-b' });
+    expect(live('B')).toHaveLength(0);
+    vi.advanceTimersByTime(10_000);
+    expect(gone).toEqual(['B']);
   });
   test('bye schließt den Link', () => {
     hello('B');

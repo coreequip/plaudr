@@ -2,6 +2,8 @@ import type { Signaling } from '../signaling/signaling';
 import type { Payload } from '../signaling/types';
 import { PeerLink, type PeerLinkLike, type PeerLinkOptions } from './peer-link';
 
+const LEAVE_GRACE_MS = 5000;
+
 export type SignalingLike = Pick<Signaling, 'send' | 'onReady' | 'onMessage' | 'onLeave' | 'close'>;
 
 export interface PeerView {
@@ -26,6 +28,7 @@ export interface MeshOptions {
 export class Mesh {
   private readonly links = new Map<string, PeerLinkLike>();
   private readonly pendingNames = new Map<string, string>();
+  private readonly leaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly createLink: (o: PeerLinkOptions) => PeerLinkLike;
 
   constructor(private readonly o: MeshOptions) {
@@ -36,8 +39,13 @@ export class Mesh {
     const s = this.o.signaling;
     s.onReady(() => s.send('hello', '*', { name: this.o.name }));
     s.onMessage((p) => this.onMessage(p));
+    // room_ws meldet member_leave auch, wenn ein Teilnehmer nur kurz neu verbindet; der P2P-Pfad läuft dann
+    // weiter. Deshalb erst nach einer Gnadenfrist abbauen, ein hello mit neuer cid hebt sie auf.
     s.onLeave((cid) => {
-      for (const [id, link] of this.links) if (link.cid === cid) this.remove(id);
+      for (const [id, link] of this.links) {
+        if (link.cid !== cid || this.leaveTimers.has(id)) continue;
+        this.leaveTimers.set(id, setTimeout(() => this.remove(id), LEAVE_GRACE_MS));
+      }
     });
   }
 
@@ -71,7 +79,7 @@ export class Mesh {
       case 'hello': {
         const name = (p.body as { name: string }).name;
         if (link) {
-          link.cid = p.cid;
+          this.setCid(p.from, link, p.cid);
           link.name = name;
           this.changed();
         } else if (p.to === '*') {
@@ -86,7 +94,7 @@ export class Mesh {
       }
       case 'offer':
         link ??= this.add(p.from, p.cid, '');
-        link.cid = p.cid;
+        this.setCid(p.from, link, p.cid);
         void link.handle(p);
         return;
       case 'answer':
@@ -133,7 +141,20 @@ export class Mesh {
     return link;
   }
 
+  private setCid(peerId: string, link: PeerLinkLike, cid: string): void {
+    if (link.cid === cid) return;
+    link.cid = cid;
+    this.cancelLeave(peerId);
+  }
+
+  private cancelLeave(peerId: string): void {
+    const t = this.leaveTimers.get(peerId);
+    if (t !== undefined) clearTimeout(t);
+    this.leaveTimers.delete(peerId);
+  }
+
   private remove(peerId: string): void {
+    this.cancelLeave(peerId);
     const link = this.links.get(peerId);
     if (!link) return;
     this.links.delete(peerId);

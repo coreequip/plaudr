@@ -89,8 +89,18 @@ test('Reconnect des Signalings', async ({ browser }) => {
   const pages = [await open(browser, h), await open(browser, h), await open(browser, h)];
   for (const [i, p] of pages.entries()) await join(p, `R${i}`);
   await expectMesh(pages, 2);
+  const aId = await pages[1].evaluate(() => window.plaudr!.peers().find((p) => p.name === 'R0')!.peerId);
+  const fromA = () => bytes(pages[1]).then((b) => b[aId]);
+  let last = await fromA();
+  expect(last).toBeGreaterThan(0);
   await pages[0].evaluate(() => window.plaudr!.dropSignaling());
-  await pages[0].waitForTimeout(5000);
+  // Audio von A bei B darf über den Abbruch hinweg nie zurückgesetzt werden (neue PC hieße: Zähler fängt bei 0 an).
+  for (let i = 0; i < 20; i++) {
+    await pages[1].waitForTimeout(250);
+    const now = await fromA();
+    expect(now).toBeGreaterThanOrEqual(last);
+    last = now;
+  }
   for (const p of pages) {
     expect(await peerCount(p)).toBe(2);
     expect(await connected(p)).toBe(2);
