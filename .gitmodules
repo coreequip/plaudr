@@ -1,0 +1,3 @@
+[submodule "vendor/room_ws"]
+	path = vendor/room_ws
+	url = https://github.com/coreequip/room_ws.git
