@@ -15,6 +15,9 @@ async function open(browser: Browser, hash: string, opts: { noMic?: boolean } = 
   }
   page.on('console', (m) => m.type() === 'warning' && console.log(`[${hash.slice(1, 6)}] ${m.text()}`));
   await page.goto('/' + hash);
+  await expect(page.locator('#lobby')).toBeVisible();
+  await expect(page.locator('#start')).toBeHidden();
+  await expect(page.locator('#call')).toBeHidden();
   return page;
 }
 
@@ -22,6 +25,7 @@ async function join(page: Page, name: string): Promise<void> {
   await page.fill('#name', name);
   await page.click('#join');
   await expect(page.locator('#call')).toBeVisible();
+  await expect(page.locator('#lobby')).toBeHidden();
 }
 
 const connected = (page: Page) =>
