@@ -22,6 +22,8 @@ export interface PeerLinkLike {
 }
 
 const MAX_ICE_RESTARTS = 3;
+/** So lange darf ein ICE-Neustart dauern, bevor er als gescheitert zählt (z. B. Gegenüber antwortet nie). */
+const ICE_RESTART_TIMEOUT_MS = 10_000;
 
 /** Eine RTCPeerConnection zu genau einem Gegenüber, verhandelt nach dem Perfect-Negotiation-Muster. */
 export class PeerLink implements PeerLinkLike {
@@ -31,6 +33,7 @@ export class PeerLink implements PeerLinkLike {
   private makingOffer = false;
   private ignoreOffer = false;
   private iceFailures = 0;
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private queue: Promise<void> = Promise.resolve();
   private readonly batcher: IceBatcher;
 
@@ -62,10 +65,12 @@ export class PeerLink implements PeerLinkLike {
 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
-      if (s === 'connected' || s === 'completed') this.iceFailures = 0;
-      if (s !== 'failed') return;
-      if (++this.iceFailures >= MAX_ICE_RESTARTS) o.onState('failed');
-      else pc.restartIce();
+      if (s === 'connected' || s === 'completed') {
+        this.iceFailures = 0;
+        this.clearRestartTimer();
+      } else if (s === 'failed') {
+        this.onIceFailure();
+      }
     };
 
     pc.onconnectionstatechange = () => {
@@ -92,8 +97,27 @@ export class PeerLink implements PeerLinkLike {
   }
 
   close(): void {
+    this.clearRestartTimer();
     this.batcher.dispose();
     this.pc.close();
+  }
+
+  private onIceFailure(): void {
+    this.clearRestartTimer();
+    if (++this.iceFailures >= MAX_ICE_RESTARTS) {
+      this.o.onState('failed');
+      return;
+    }
+    this.pc.restartIce();
+    this.restartTimer = setTimeout(() => {
+      const s = this.pc.iceConnectionState;
+      if (s !== 'connected' && s !== 'completed') this.onIceFailure();
+    }, ICE_RESTART_TIMEOUT_MS);
+  }
+
+  private clearRestartTimer(): void {
+    if (this.restartTimer !== null) clearTimeout(this.restartTimer);
+    this.restartTimer = null;
   }
 
   private async process(p: Payload): Promise<void> {
