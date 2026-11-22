@@ -1,5 +1,5 @@
 export interface Bodies {
-  hello: { name: string };
+  hello: { pub: string; name: string; caps: string[] };
   offer: { sdp: string };
   answer: { sdp: string };
   ice: { c: RTCIceCandidateInit[] };
@@ -16,10 +16,4 @@ export interface Payload<K extends Kind = Kind> {
   ts: number;
   nonce: string;
   body: Bodies[K];
-}
-
-/** M1: Klartext. M2: { v: 1, iv, ct }. */
-export interface Envelope {
-  v: 0;
-  p: Payload;
 }

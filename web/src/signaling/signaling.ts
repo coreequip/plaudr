@@ -1,10 +1,13 @@
-import { randomBase64url } from '../util/base64url';
+import { openEnvelope, seal } from '../crypto/envelope';
+import { peerIdFor, verifySignature, type Identity } from '../crypto/identity';
+import { fromBase64url, randomBase64url } from '../util/base64url';
 import type { Bodies, Kind, Payload } from './types';
 
 export interface DroneLike {
   clientId: string | null;
   subscribe(room: string): RoomLike;
   publish(m: { room: string; message: unknown; no_echo?: boolean }): void;
+  on(ev: 'open' | 'close', cb: () => void): void;
   close(): void;
 }
 
@@ -12,41 +15,73 @@ export interface RoomLike {
   on(ev: string, cb: (...a: any[]) => void): void;
 }
 
+export type RejectReason = 'malformed' | 'decrypt' | 'to' | 'identity' | 'unknown-key' | 'signature' | 'replay' | 'cid';
+
+export interface SignalingStats {
+  accepted: number;
+  rejected: Record<RejectReason, number>;
+}
+
+export interface SignalingOptions {
+  drone: DroneLike;
+  roomId: string;
+  roomKey: CryptoKey;
+  identity: Identity;
+  now?: () => number;
+}
+
 const MAX_SKEW_MS = 120_000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
 const KINDS: ReadonlySet<string> = new Set<Kind>(['hello', 'offer', 'answer', 'ice', 'bye']);
 
+class Rejected {
+  constructor(readonly reason: RejectReason) {}
+}
+
+/**
+ * Verschlüsseltes, signiertes Signaling über room_ws (Spec §5). Senden und Empfangen laufen je über eine
+ * serielle Warteschlange: Asynchrone Krypto darf die Reihenfolge (hello vor offer vor ice) nicht ändern.
+ */
 export class Signaling {
-  private readonly drone: DroneLike;
-  private readonly roomId: string;
-  private readonly selfId: string;
-  private readonly now: () => number;
+  private readonly o: Required<SignalingOptions>;
   private readonly seen = new Map<string, number>();
+  private readonly keys = new Map<string, string>();
+  private readonly counts: SignalingStats = {
+    accepted: 0,
+    rejected: { malformed: 0, decrypt: 0, to: 0, identity: 0, 'unknown-key': 0, signature: 0, replay: 0, cid: 0 },
+  };
+  private sendQueue: Promise<void> = Promise.resolve();
+  private recvQueue: Promise<void> = Promise.resolve();
+  private connected = false;
+  private waiters: (() => void)[] = [];
   private readyCbs: ((cid: string) => void)[] = [];
   private messageCbs: ((p: Payload) => void)[] = [];
   private leaveCbs: ((cid: string) => void)[] = [];
 
-  constructor(o: { drone: DroneLike; roomId: string; selfId: string; now?: () => number }) {
-    this.drone = o.drone;
-    this.roomId = o.roomId;
-    this.selfId = o.selfId;
-    this.now = o.now ?? Date.now;
-    const room = this.drone.subscribe(this.roomId);
+  constructor(o: SignalingOptions) {
+    this.o = { now: Date.now, ...o };
+    const room = o.drone.subscribe(o.roomId);
+    // Bis zum nächsten members ist die cid unbekannt oder veraltet: so lange wird nichts veröffentlicht.
+    o.drone.on('close', () => (this.connected = false));
     room.on('members', () => {
-      const cid = this.drone.clientId;
-      if (cid) for (const cb of this.readyCbs) cb(cid);
+      const cid = o.drone.clientId;
+      if (!cid) return;
+      this.connected = true;
+      for (const w of this.waiters.splice(0)) w();
+      for (const cb of this.readyCbs) cb(cid);
     });
     room.on('member_leave', (cid: string) => {
       for (const cb of this.leaveCbs) cb(cid);
     });
-    room.on('message', (msg: unknown, meta: { client_id?: string } | undefined) => this.receive(msg, meta?.client_id));
+    room.on('message', (msg: unknown, meta: { client_id?: string } | undefined) => {
+      this.recvQueue = this.recvQueue.then(() => this.receive(msg, meta?.client_id));
+    });
   }
 
   send<K extends Kind>(kind: K, to: string, body: Bodies[K]): void {
-    const p: Payload<K> = {
-      kind, from: this.selfId, to, cid: this.drone.clientId ?? '', ts: this.now(), nonce: randomBase64url(16), body,
-    };
-    this.drone.publish({ room: this.roomId, message: { v: 0, p }, no_echo: true });
+    this.sendQueue = this.sendQueue.then(() =>
+      this.publishOne(kind, to, body).catch((err) => console.warn('[plaudr] Senden fehlgeschlagen', err)),
+    );
   }
 
   onReady(cb: (cid: string) => void): void {
@@ -59,21 +94,76 @@ export class Signaling {
     this.leaveCbs.push(cb);
   }
 
-  close(): void {
-    this.drone.close();
+  stats(): SignalingStats {
+    return { accepted: this.counts.accepted, rejected: { ...this.counts.rejected } };
   }
 
-  private receive(msg: unknown, senderCid: string | undefined): void {
-    const p = parse(msg);
-    if (!p || !senderCid) return;
-    if (p.to !== this.selfId && p.to !== '*') return;
-    if (p.cid !== senderCid) return;
-    const now = this.now();
-    if (Math.abs(now - p.ts) > MAX_SKEW_MS) return;
+  /** Löst auf, sobald alles bis jetzt Eingereihte gesendet bzw. geprüft ist. */
+  async idle(): Promise<void> {
+    await Promise.all([this.sendQueue, this.recvQueue]);
+  }
+
+  close(): void {
+    this.o.drone.close();
+  }
+
+  private async publishOne<K extends Kind>(kind: K, to: string, body: Bodies[K]): Promise<void> {
+    if (!this.connected) await new Promise<void>((r) => this.waiters.push(r));
+    const payload: Payload<K> = {
+      kind, from: this.o.identity.peerId, to, cid: this.o.drone.clientId ?? '', ts: this.o.now(), nonce: randomBase64url(16), body,
+    };
+    const p = JSON.stringify(payload);
+    const sig = await this.o.identity.sign(p);
+    const message = await seal(this.o.roomKey, JSON.stringify({ p, sig }));
+    this.o.drone.publish({ room: this.o.roomId, message, no_echo: true });
+  }
+
+  private async receive(msg: unknown, senderCid: string | undefined): Promise<void> {
+    try {
+      const p = await this.verify(msg, senderCid);
+      this.counts.accepted++;
+      for (const cb of this.messageCbs) cb(p);
+    } catch (err) {
+      if (err instanceof Rejected) this.counts.rejected[err.reason]++;
+      else console.warn('[plaudr] Nachricht nicht verarbeitbar', err);
+    }
+  }
+
+  /** Prüfregeln aus Spec §5 in der dort festgelegten Reihenfolge. */
+  private async verify(msg: unknown, senderCid: string | undefined): Promise<Payload> {
+    const plain = await openEnvelope(this.o.roomKey, msg);
+    if (plain === null) throw new Rejected('decrypt');
+    const { pStr, sig, p } = parseInner(plain);
+
+    if (p.to !== this.o.identity.peerId && p.to !== '*') throw new Rejected('to');
+
+    let pub: string;
+    if (p.kind === 'hello') {
+      pub = (p.body as Bodies['hello']).pub;
+      let derived: string;
+      try {
+        derived = await peerIdFor(fromBase64url(pub));
+      } catch {
+        throw new Rejected('identity');
+      }
+      if (derived !== p.from) throw new Rejected('identity');
+    } else {
+      const known = this.keys.get(p.from);
+      if (!known) throw new Rejected('unknown-key');
+      pub = known;
+    }
+    if (!(await verifySignature(pub, sig, pStr))) throw new Rejected('signature');
+
+    const now = this.o.now();
+    if (Math.abs(now - p.ts) > MAX_SKEW_MS) throw new Rejected('replay');
     this.pruneNonces(now);
-    if (this.seen.has(p.nonce)) return;
+    if (this.seen.has(p.nonce)) throw new Rejected('replay');
+
+    if (!senderCid || p.cid !== senderCid) throw new Rejected('cid');
+
     this.seen.set(p.nonce, p.ts);
-    for (const cb of this.messageCbs) cb(p);
+    if (p.kind === 'hello') this.keys.set(p.from, pub);
+    return p;
   }
 
   private pruneNonces(now: number): void {
@@ -81,13 +171,31 @@ export class Signaling {
   }
 }
 
-function parse(msg: unknown): Payload | null {
-  if (typeof msg !== 'object' || msg === null) return null;
-  const env = msg as { v?: unknown; p?: unknown };
-  if (env.v !== 0 || typeof env.p !== 'object' || env.p === null) return null;
-  const p = env.p as Record<string, unknown>;
-  if (typeof p.kind !== 'string' || !KINDS.has(p.kind)) return null;
-  for (const k of ['from', 'to', 'cid', 'nonce'] as const) if (typeof p[k] !== 'string') return null;
-  if (typeof p.ts !== 'number' || typeof p.body !== 'object' || p.body === null) return null;
-  return p as unknown as Payload;
+function parseInner(plain: string): { pStr: string; sig: string; p: Payload } {
+  let inner: unknown;
+  let p: unknown;
+  try {
+    inner = JSON.parse(plain);
+    const { p: pStr } = inner as { p?: unknown };
+    if (typeof pStr !== 'string') throw 0;
+    p = JSON.parse(pStr);
+  } catch {
+    throw new Rejected('malformed');
+  }
+  const { p: pStr, sig } = inner as { p: string; sig?: unknown };
+  if (typeof sig !== 'string' || !isPayload(p)) throw new Rejected('malformed');
+  return { pStr, sig, p };
+}
+
+function isPayload(x: unknown): x is Payload {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Record<string, unknown>;
+  if (typeof p.kind !== 'string' || !KINDS.has(p.kind)) return false;
+  for (const k of ['from', 'to', 'cid', 'nonce'] as const) if (typeof p[k] !== 'string') return false;
+  if (typeof p.ts !== 'number' || typeof p.body !== 'object' || p.body === null) return false;
+  if (p.kind === 'hello') {
+    const b = p.body as Record<string, unknown>;
+    if (typeof b.pub !== 'string' || typeof b.name !== 'string') return false;
+  }
+  return true;
 }
