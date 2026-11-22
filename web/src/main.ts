@@ -11,7 +11,7 @@ import { idbIdentityStore } from './crypto/identity-store';
 import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { autoJoinTarget } from './room/auto-join';
-import { canJoin } from './room/join-rule';
+import { canJoin, needsBackup } from './room/join-rule';
 import { loadRooms, noteJoin, notePeers, saveRooms } from './room/rooms';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
@@ -49,7 +49,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const store = idbIdentityStore();
 let identity: Identity | null = null;
 let tabLocked = false;
-/** Ein Gespräch läuft in dieser Seite (es gibt höchstens eins je Seitenaufruf). */
+/** Ein Beitritt hat in dieser Seite begonnen (höchstens einer je Seitenaufruf, auch während er noch lädt). */
 let inCall = false;
 
 function loadName(): string {
@@ -91,7 +91,7 @@ const joinState = () => ({ name: nameValue(), tabLocked, identity });
 function updateJoinButton(): void {
   $<HTMLButtonElement>('join').disabled = !canJoin(joinState());
   // Der Hinweis gilt nur, solange die Pflichtsicherung fehlt.
-  $('join-hint').hidden = !(tabLocked && identity !== null && !identity.backedUp && identity.persistent);
+  $('join-hint').hidden = !(tabLocked && needsBackup(identity));
 }
 
 /** Einmal je Seitenaufruf: Tab sperren, Identität laden, Sicherung anbieten oder verlangen. */
@@ -132,9 +132,25 @@ function prepareLobby(): Promise<void> {
 async function join(secret: string): Promise<void> {
   const name = nameValue();
   const me = identity;
-  if (!name || !me) return;
+  // Vor dem ersten await: ein zweiter Aufruf (Doppelklick, anderer Raum per Fragment) startet kein zweites Mesh.
+  if (inCall || !name || !me) return;
+  inCall = true;
   saveName(name);
   $<HTMLButtonElement>('join').disabled = true;
+
+  // Gespräch sofort zeigen: Mikrofonfreigabe, Worklet und TURN können dauern.
+  saveRooms(noteJoin(loadRooms(), secret, Date.now()));
+  initCallHeader({
+    secret,
+    link: buildLink(location.origin, secret),
+    rooms: () => loadRooms(),
+    setRooms: (r) => saveRooms(r),
+    notice: view.notice,
+  });
+  view.renderPeers([]);
+  view.show('call');
+  // Bis das Mesh steht, gibt es nichts zu verlassen außer dem Bildschirm.
+  $('leave').onclick = $('back').onclick = () => location.assign(location.pathname);
 
   let settings = loadAudioSettings();
   const [capture, iceServers, { roomId, roomKey }] = await Promise.all([
@@ -142,7 +158,6 @@ async function join(secret: string): Promise<void> {
     fetchIceServers(TURN_URL),
     deriveRoom(secret),
   ]);
-  saveRooms(noteJoin(loadRooms(), secret, Date.now()));
   if (!me.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
   if (!capture) view.notice('Kein Mikrofon: du hörst nur zu.');
   else if (!capture.processed) view.notice('Rauschunterdrückung und Sprachaktivierung sind in diesem Browser nicht verfügbar.');
@@ -177,16 +192,6 @@ async function join(secret: string): Promise<void> {
   syncMuted();
   mesh.start();
 
-  initCallHeader({
-    secret,
-    link: buildLink(location.origin, secret),
-    rooms: () => loadRooms(),
-    setRooms: (r) => saveRooms(r),
-    notice: view.notice,
-  });
-  view.renderPeers([]);
-  view.show('call');
-  inCall = true;
   if (capture?.needsGesture()) $('unmute-audio').hidden = false;
   $('unmute-audio').onclick = () => {
     view.resumeAllAudio();
@@ -267,7 +272,7 @@ function boot(): void {
 
   let first = true;
   const route = () => {
-    // Anderer Raum im Fragment während eines Gesprächs: neu laden, pagehide verlässt das alte sauber.
+    // Anderer Raum im Fragment während eines Gesprächs oder Beitritts: neu laden, pagehide verlässt das alte sauber.
     if (inCall) return location.reload();
     const booted = first ? takeBooted() : true;
     first = false;

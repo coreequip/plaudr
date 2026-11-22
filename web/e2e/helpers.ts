@@ -61,12 +61,17 @@ export async function join(page: Page, name: string): Promise<void> {
   await page.click('#join');
   await expect(page.locator('#call')).toBeVisible();
   await expect(page.locator('#lobby')).toBeHidden();
+  await joined(page);
 }
+
+/** Das Gespräch erscheint vor Mikrofon und Mesh; fertig ist der Beitritt erst mit window.plaudr. */
+const joined = (page: Page) => expect.poll(() => page.evaluate(() => window.plaudr !== undefined)).toBe(true);
 
 /** Name gemerkt, Schlüssel gesichert, Tab frei: ohne Lobby direkt im Gespräch. */
 export async function expectDirectCall(page: Page): Promise<void> {
   await expect(page.locator('#call')).toBeVisible();
   await expect(page.locator('#lobby')).toBeHidden();
+  await joined(page);
 }
 
 export const connected = (page: Page) =>

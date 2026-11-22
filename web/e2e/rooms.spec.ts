@@ -132,6 +132,44 @@ test('Raum im Gespräch umbenennen erscheint in der Liste', async ({ browser }) 
   await expect(page.locator('#rooms-list li .room-title')).toHaveText('Spieleabend');
 });
 
+test('Gespräch erscheint sofort beim Beitreten; Raumwechsel währenddessen lädt neu statt doppelt beizutreten', async ({ browser }) => {
+  const [hashA, hashB] = [roomHash('doppelA'), roomHash('doppelB')];
+  const page = await open(browser, hashA);
+  await join(page, 'Anna');
+  await page.click('#leave');
+  await expect(page.locator('#start')).toBeVisible();
+  await page.evaluate((h) => (location.hash = h), hashB);
+  await expectDirectCall(page);
+  await page.click('#room-rename');
+  await page.fill('#room-name-input', 'Zwei');
+  await page.press('#room-name-input', 'Enter');
+  await page.click('#leave');
+  await expect(page.locator('#start')).toBeVisible();
+
+  // Mikrofonfreigabe hängt (wie ein offener Berechtigungsdialog): der Beitritt bleibt vor seinem ersten await stehen.
+  await page.evaluate(() => {
+    (window as any).__gum = 0;
+    navigator.mediaDevices.getUserMedia = () => {
+      (window as any).__gum++;
+      return new Promise(() => {});
+    };
+  });
+  await page.locator(`#rooms-list li[data-room="${secretOf(hashA)}"] .room-join`).click();
+  await expect(page.locator('#call')).toBeVisible({ timeout: 1000 });
+  await expect(page.locator('#start')).toBeHidden();
+  const heute = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long' }).format(new Date());
+  await expect(page.locator('#room-title')).toHaveText(`Raum vom ${heute}`);
+  await expect(page.locator('#peer-count')).toHaveText('IM RAUM (0)');
+  expect(await page.evaluate(() => (window as any).__gum)).toBe(1);
+
+  // Wechsel zu B, solange A noch lädt: neu laden statt einen zweiten Beitritt daneben zu starten.
+  await Promise.all([page.waitForEvent('load'), page.evaluate((h) => (location.hash = h), hashB)]);
+  expect(await page.evaluate(() => (window as any).__gum)).toBeUndefined();
+  await expectDirectCall(page);
+  await expect(page.locator('#room-title')).toHaveText('Zwei');
+  expect(new URL(page.url()).hash).toBe(hashB);
+});
+
 test('ein gewählter Farbton ändert --accent', async ({ browser }) => {
   const ctx = await newContext(browser);
   const page = await ctx.newPage();

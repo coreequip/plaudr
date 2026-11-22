@@ -1,5 +1,6 @@
 import { BackupError, createBackup, MIN_PASSWORD_LENGTH, restoreBackup } from '../crypto/backup';
 import { identityFrom, type Identity, type IdentityStore } from '../crypto/identity';
+import { needsBackup } from '../room/join-rule';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -86,8 +87,7 @@ export function initBackupPanel(o: BackupPanelOptions): void {
 
 /** Zeigt die Sicherung als Pflicht (neue Identität) oder nur als Angebot. */
 export function showBackupState(id: Identity): void {
-  const required = !id.backedUp && id.persistent;
-  $('backup').hidden = !required;
+  $('backup').hidden = !needsBackup(id);
 }
 
 /** Hängt die Sicherungskarte in einen anderen Bildschirm um (Einstellungen); Zustand und Handler bleiben. */
