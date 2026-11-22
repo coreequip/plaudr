@@ -53,4 +53,26 @@ angepasst werden. Die Einstellungs-Oberfläche selbst ist per E2E mit nachgebaut
 | 19 | Windows | wie 11 (Alt+Leertaste, Anzeige „Alt+Leertaste“) | wie 11 | |
 | 20 | Windows | wie 12 bis 18 | wie 12 bis 18 | |
 
+## Tray, Fenster schließen, Beenden (nach Task 4)
+
+Menü, Fenster und Beenden sind per E2E mit nachgebautem Tauri geprüft (`web/e2e/desktop.spec.ts`); offen
+ist, wie das echte System Symbol und Menü zeigt und ob das Gegenüber beim echten Beenden sofort Bescheid
+bekommt. Gegenstelle für 26 bis 29: ein Browser-Tab im selben Raum (die Gnadenfrist dort ist 5 s).
+
+| # | Plattform | Prüfung | Erwartung | Ergebnis |
+|---|---|---|---|---|
+| 21 | macOS | App starten, Tray-Symbol in der Menüleiste anklicken (ohne Gespräch) | schwarzes „p“ mit Pegelbalken, im Dunkelmodus hell (Template); Menü: „Kein Gespräch“, Trenner, „Stumm schalten“, „Automatisch sprechen“ (beide gesperrt), „Fenster zeigen“, Trenner, „Raum verlassen“ (gesperrt), „plaudr beenden“ | |
+| 22 | macOS | Raum mit dem Browser-Tab, Push-to-Talk mit ⌥ Leertaste, Menü öffnen | Kopf „<Raum> · 2 im Raum“, darunter „Push-to-Talk (⌥ Leertaste)“; „Stumm schalten“ schaltet stumm (Kopfzeile „Stumm“, Eintrag heißt „Stummschaltung aufheben“), „Automatisch sprechen“ mit Häkchen schaltet um | |
+| 23 | macOS | Globale Taste halten, dann loslassen | Symbol grün, solange du sendest, danach wieder Template; im Modus Automatisch grün beim Sprechen | |
+| 24 | macOS | Fenster mit dem roten Knopf (oder Cmd+W) schließen, zum ersten Mal | Hinweis „plaudr läuft im Tray weiter.“ unten im Fenster, nach 2 s verschwindet das Fenster; App läuft weiter, Gespräch und globale Taste auch | |
+| 25 | macOS | Noch einmal schließen; dann „Fenster zeigen“ im Tray, dann Klick aufs Dock-Symbol bei verstecktem Fenster | kein Hinweis mehr, Fenster sofort weg; „Fenster zeigen“ und das Dock-Symbol holen es nach vorn | |
+| 26 | macOS | Im Gespräch „Raum verlassen“ im Tray | Fenster zeigt „Deine Räume“ (kein Auto-Beitritt), im Browser-Tab verschwindest du sofort; Tray-Kopf „Kein Gespräch“ | |
+| 27 | macOS | Im Gespräch „plaudr beenden“ im Tray | App ist binnen 1 s weg, im Browser-Tab verschwindest du sofort (nicht erst nach 5 s) | |
+| 28 | macOS | Im Gespräch Cmd+Q (App-Menü heißt jetzt „plaudr beenden“) | wie 27 | |
+| 29 | macOS | Im Gespräch Rechtsklick aufs Dock-Symbol › Beenden; Abmelden vom System | App wartet bis 1 s, im Browser-Tab verschwindest du sofort (bestmöglich; geht es nicht, greift dort die Gnadenfrist) | |
+| 30 | Windows | Tray-Symbol in der Taskleiste (ggf. unter „Ausgeblendete Symbole“) | graues „p“, beim Senden grün; Tooltip „plaudr · <Raum> · <Modus>“ | |
+| 31 | Windows | Linksklick aufs Tray-Symbol bei verstecktem Fenster; Rechtsklick | Linksklick zeigt das Fenster, Rechtsklick das Menü wie unter 21 und 22 | |
+| 32 | Windows | wie 24 bis 27 (Schließen mit X oder Alt+F4) | wie 24 bis 27 | |
+| 33 | Windows | Im Gespräch abmelden oder herunterfahren | im Browser-Tab verschwindest du sofort (bestmöglich, wie 29) | |
+
 Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.

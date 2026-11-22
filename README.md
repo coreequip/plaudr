@@ -46,6 +46,9 @@ einer neuen Abhängigkeit die Lockfile mit Stichtag neu auflösen (in `desktop/s
 minus zwei Wochen): `RUSTC_BOOTSTRAP=1 cargo -Zunstable-options generate-lockfile --publish-time 2026-11-08T00:00:00Z`.
 Für npm entsprechend `npm install --save-exact --before=2026-11-08 paket@x.y.z`.
 
+Die Tray-Symbole (`desktop/src-tauri/icons/tray-*.png`) erzeugt `desktop/scripts/tray-icons.sh` aus dem
+App-Symbol neu (braucht `rsvg-convert`).
+
 Prüfpunkte von Hand: [docs/m4-handprobe.md](docs/m4-handprobe.md).
 
 ## Lizenz

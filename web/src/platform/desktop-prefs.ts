@@ -5,6 +5,8 @@ import { isValidAccelerator, shortcutLabel, type GlobalPtt } from './shortcut';
 export interface DesktopPrefs {
   /** Globale Push-to-Talk-Taste im Tauri-Format; ohne Vorgabe (Spec §7). */
   pttShortcut: string | null;
+  /** Der einmalige Hinweis „plaudr läuft im Tray weiter.“ wurde gezeigt. */
+  trayNoticeShown: boolean;
 }
 
 const KEY = 'plaudr.desktop';
@@ -12,18 +14,24 @@ const KEY = 'plaudr.desktop';
 export function loadDesktopPrefs(storage?: Storage): DesktopPrefs {
   try {
     const raw: unknown = JSON.parse((storage ?? localStorage).getItem(KEY) ?? '{}');
-    const s = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).pttShortcut : null;
-    return { pttShortcut: typeof s === 'string' && isValidAccelerator(s) ? s : null };
+    const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    const s = o.pttShortcut;
+    return {
+      pttShortcut: typeof s === 'string' && isValidAccelerator(s) ? s : null,
+      trayNoticeShown: o.trayNoticeShown === true,
+    };
   } catch {
-    // Kaputt oder nicht lesbar: keine Taste.
-    return { pttShortcut: null };
+    // Kaputt oder nicht lesbar: keine Taste, Hinweis noch nicht gezeigt.
+    return { pttShortcut: null, trayNoticeShown: false };
   }
 }
 
-export function saveDesktopPrefs(p: DesktopPrefs, storage?: Storage): void {
-  const pttShortcut = p.pttShortcut && isValidAccelerator(p.pttShortcut) ? p.pttShortcut : null;
+/** Schreibt die genannten Felder; die übrigen bleiben, wie sie gespeichert sind. */
+export function saveDesktopPrefs(p: Partial<DesktopPrefs>, storage?: Storage): void {
+  const next = { ...loadDesktopPrefs(storage), ...p };
+  if (next.pttShortcut && !isValidAccelerator(next.pttShortcut)) next.pttShortcut = null;
   try {
-    (storage ?? localStorage).setItem(KEY, JSON.stringify({ pttShortcut }));
+    (storage ?? localStorage).setItem(KEY, JSON.stringify(next));
   } catch {
     /* privater Modus: wird nicht gemerkt */
   }

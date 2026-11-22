@@ -3,5 +3,14 @@
   "identifier": "default",
   "description": "Rechte für das Hauptfenster",
   "windows": ["main"],
-  "permissions": ["core:default", "global-shortcut:allow-register", "global-shortcut:allow-unregister"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "process:allow-exit"
+  ]
 }

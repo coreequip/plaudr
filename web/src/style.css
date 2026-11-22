@@ -211,3 +211,10 @@ button.link-button { align-self: flex-start; min-height: 36px; padding: 0; borde
 .set-done { margin: 0; font-size: 0.8rem; color: var(--accent); font-weight: 500; }
 #backup-slot:empty { display: none; }
 #backup-slot .backup-card { padding: 12px; border-radius: 10px; background: var(--bg); }
+
+/* Desktop: Hinweis beim ersten Schließen des Fensters. */
+.tray-notice {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 100;
+  padding: 12px 14px; border-radius: 10px; text-align: center;
+  background: var(--accent); color: var(--accent-fg); font-weight: 600;
+}
