@@ -21,7 +21,10 @@ export interface UpdaterDeps {
   leave(): Promise<void>;
   /** Zeigt den Hinweis auf dem Startbildschirm (Version) oder nimmt ihn weg (null). */
   show(version: string | null): void;
-  /** Knopf gesperrt, solange installiert wird. */
+  /**
+   * true, sobald „Jetzt aktualisieren“ läuft: Bis zum Neustart darf kein Gespräch beginnen (Windows beendet
+   * die App beim Installieren, macOS startet neu). false nach einem Fehler.
+   */
   busy(on: boolean): void;
   intervalMs?: number;
 }
@@ -51,7 +54,13 @@ export function startUpdater(d: UpdaterDeps): Updater {
     try {
       const u = await d.check();
       // Während der Prüfung hat ein Gespräch begonnen oder das Installieren: verwerfen, die nächste Prüfung kommt.
-      if (!u || d.inCall() || installing) return drop(u);
+      if (d.inCall() || installing) return drop(u);
+      // Kein Update mehr (etwa zurückgezogen): Hinweis weg.
+      if (!u) {
+        drop(pending);
+        pending = null;
+        return refresh();
+      }
       drop(pending);
       pending = u;
       refresh();

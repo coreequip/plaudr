@@ -107,18 +107,10 @@ jobs:
       - name: Update-Signatur einrichten
         id: updater
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
           IS_TAG: ${{ github.ref_type == 'tag' }}
         run: |
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
-              {
-                echo "$name<<PLAUDR_EOF"
-                echo "${!name}"
-                echo "PLAUDR_EOF"
-              } >> "$GITHUB_ENV"
-            done
+          if [ "$HAS_KEY" = "true" ]; then
             echo "args=--config src-tauri/tauri.release.conf.json" >> "$GITHUB_OUTPUT"
             echo "enabled=1" >> "$GITHUB_OUTPUT"
             echo "Update-Artefakte werden signiert."
@@ -132,6 +124,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Nur in diesem Schritt. Ohne --config aus dem Schritt davor (kein Schlüssel) wertet die CLI sie nicht aus.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
           # --config ist relativ zu projectPath; latest.json lädt tauri-action selbst hoch (uploadUpdaterJson, Standard).

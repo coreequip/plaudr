@@ -55,12 +55,22 @@ describe('startUpdater', () => {
     u.stop();
   });
 
+  test('Update zurückgezogen: Hinweis verschwindet bei der nächsten Prüfung', async () => {
+    const t = setup();
+    const u = startUpdater(t.deps);
+    await flush();
+    t.setNext(null);
+    await vi.advanceTimersByTimeAsync(UPDATE_INTERVAL_MS);
+    expect(t.log).toEqual(['check', 'show 0.2.0', 'check', 'close 0.2.0', 'show null']);
+    u.stop();
+  });
+
   test('kein Update: kein Hinweis', async () => {
     const t = setup();
     t.setNext(null);
     startUpdater(t.deps).stop();
     await flush();
-    expect(t.log).toEqual(['check']);
+    expect(t.log).toEqual(['check', 'show null']);
   });
 
   test('im Gespräch: keine Prüfung, kein Hinweis, keine Installation', async () => {

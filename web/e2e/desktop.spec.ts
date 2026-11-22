@@ -44,7 +44,7 @@ declare global {
  * Fenster und Beenden, die der Test bedient.
  * Im Browser ohne diese Attrappe bleibt alles beim Alten (Tests oben).
  */
-function fakeTauri(opts?: { startLinks?: string[]; update?: string }): void {
+function fakeTauri(opts?: { startLinks?: string[]; update?: string; hangDownload?: boolean }): void {
   const callbacks = new Map<number, (m: unknown) => void>();
   const handlers = new Map<string, { id: number; index: number }>();
   let next = 1;
@@ -229,6 +229,8 @@ function fakeTauri(opts?: { startLinks?: string[]; update?: string }): void {
           return app.update && { rid: next++, currentVersion: '0.1.0', version: app.update, date: null, body: null, rawJson: {} };
         case 'plugin:updater|download_and_install':
           app.calls.push('updater|download_and_install');
+          // Hängender Download: Die Installation endet nie, die App bleibt im Zustand „wird installiert“.
+          if (opts?.hangDownload) await new Promise(() => {});
           return null;
         case 'plugin:resources|close':
           return null;
@@ -712,4 +714,23 @@ test('Desktop: im Gespräch kein Hinweis und keine Installation, nach dem Verlas
   await expect(page.locator('#start')).toBeVisible();
   await expect(page.locator('#update-text')).toHaveText('Neue Version 0.2.0 verfügbar.');
   expect(await page.evaluate(() => window.fakeApp!.calls)).not.toContain('updater|download_and_install');
+});
+
+test('Desktop: während der Update-Installation führt ein Link in keinen Raum', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri, { update: '0.2.0', hangDownload: true });
+  await page.goto('/');
+  await page.click('#update-install');
+  await expect(page.locator('.update-overlay')).toHaveText('Update wird installiert …');
+  expect(await page.evaluate(() => document.querySelector('main')!.inert)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.calls)).toContain('updater|download_and_install');
+
+  await page.evaluate((u) => window.fakeApp!.openUrl([u]), `plaudr://raum${roomHash('desktopupdatelink')}`);
+  await page.waitForTimeout(1000);
+  expect(await hashOf(page)).toBe('');
+  await expect(page.locator('#call')).toBeHidden();
+  await expect(page.locator('#lobby')).toBeHidden();
+  // Auch „Öffnen“ für einen Einladungslink auf dem Startbildschirm nimmt keinen Klick an.
+  await expect(page.locator('#paste-open').click({ timeout: 500 })).rejects.toThrow();
+  expect(await page.evaluate(() => window.fakeApp!.calls)).not.toContain('restart');
 });

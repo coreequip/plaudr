@@ -187,8 +187,13 @@ export function desktopPlatform(actions: AppActions): Platform {
   };
   // Nacheinander, damit zwei schnelle Links nicht beide ein Verlassen anstoßen; der letzte gewinnt.
   let linkQueue: Promise<void> = Promise.resolve();
+  // Während ein Update installiert wird, kein Gespräch beginnen: Der letzte Link wartet, scheitert das Update,
+  // wird er danach übernommen; sonst geht er mit dem Neustart verloren.
+  let updating = false;
+  let deferredLinks: string[] | null = null;
   const openLinks = (urls: string[]) =>
     (linkQueue = linkQueue.then(async () => {
+      if (updating) return void (deferredLinks = urls);
       markHandled(JSON.stringify(urls));
       const secret = urls.map(secretFromDeepLink).find((x) => x !== null) ?? null;
       showWindow();
@@ -215,8 +220,24 @@ export function desktopPlatform(actions: AppActions): Platform {
     leave: leaveAtMost,
     show: showUpdate,
     busy: (on) => {
+      updating = on;
       const b = document.querySelector<HTMLButtonElement>('#update-install');
       if (b) b.disabled = on;
+      // Alles sperren (Klick und Tastatur), damit bis zum Neustart niemand einem Raum beitritt.
+      const main = document.querySelector('main');
+      if (main) main.inert = on;
+      document.querySelector('.update-overlay')?.remove();
+      if (on) {
+        const o = document.createElement('div');
+        o.className = 'update-overlay';
+        o.setAttribute('role', 'status');
+        o.textContent = 'Update wird installiert …';
+        document.body.append(o);
+      } else if (deferredLinks) {
+        const urls = deferredLinks;
+        deferredLinks = null;
+        void openLinks(urls);
+      }
     },
   });
   function showUpdate(version: string | null): void {

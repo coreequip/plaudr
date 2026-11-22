@@ -57,6 +57,11 @@ Entwürfe und Pre-Releases. Solange der Entwurf aus dem Tag-Lauf nicht veröffen
 etwas; ein als Pre-Release veröffentlichter Release wird nie ausgeliefert. Wer ein Update zurückhalten will,
 lässt den Entwurf einfach liegen.
 
+**Vor dem Veröffentlichen `latest.json` im Entwurf ansehen.** Beide Jobs (macOS und Windows) laden die
+Datei, tragen ihre Plattform ein und laden sie wieder hoch. Laufen sie zufällig gleichzeitig, kann der
+Eintrag des einen fehlen: Es müssen `darwin-aarch64`, `darwin-x86_64` und `windows-x86_64` drinstehen. Fehlt
+einer, den Job dieser Plattform neu starten („Re-run job“), er ergänzt seinen Eintrag.
+
 ### Signaturschlüssel
 
 Updates sind mit einem eigenen minisign-Schlüssel signiert, unabhängig von Apples Developer-ID. Eine App
@@ -72,7 +77,8 @@ nimmt nur Updates an, die mit dem privaten Schlüssel zum eingebauten öffentlic
   `desktop/src-tauri/tauri.conf.json` eintragen und `endpoints` auf das eigene Repository umstellen.
 - **Secrets für den Workflow:** `TAURI_SIGNING_PRIVATE_KEY` (Inhalt der privaten Schlüsseldatei) und
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, etwa mit `gh secret set TAURI_SIGNING_PRIVATE_KEY < <Pfad zur
-  Schlüsseldatei>` und `gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (fragt den Wert ab). Bei einem
+  Schlüsseldatei>` und `gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (fragt den Wert ab). Der Workflow
+  gibt beide nur dem Build-Schritt (tauri-action) mit, kein anderer Schritt sieht sie. Bei einem
   Tag bricht der Lauf ohne den Schlüssel ab, sonst käme ein Release ohne `latest.json` heraus. Von Hand
   gestartet baut er ohne Schlüssel weiter, dann nur ohne Update-Artefakte (Warnung „Ohne Updates“).
 
