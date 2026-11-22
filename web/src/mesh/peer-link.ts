@@ -1,6 +1,7 @@
 import type { Bodies, Payload } from '../signaling/types';
 import { IceBatcher } from './ice-batcher';
 import { tuneOpus } from './sdp';
+import { encodeCtl, parseCtl } from './ctl';
 
 export interface PeerLinkOptions {
   peerId: string;
@@ -10,6 +11,8 @@ export interface PeerLinkOptions {
   send: (kind: 'offer' | 'answer' | 'ice', body: Bodies['offer'] | Bodies['answer'] | Bodies['ice']) => void;
   onTrack: (s: MediaStream) => void;
   onState: (s: RTCPeerConnectionState) => void;
+  /** Das Gegenüber hat seinen Stumm-Status über den Kontrollkanal geändert. */
+  onRemoteState: () => void;
 }
 
 export interface PeerLinkLike {
@@ -17,6 +20,10 @@ export interface PeerLinkLike {
   cid: string;
   name: string;
   readonly state: RTCPeerConnectionState;
+  /** Stumm-Status des Gegenübers laut Kontrollkanal; anfangs false. */
+  readonly remoteMuted: boolean;
+  /** Teilt dem Gegenüber den eigenen Stumm-Status mit (vor dem Öffnen des Kanals nur gemerkt). */
+  setLocalMuted(m: boolean): void;
   handle(p: Payload): Promise<void>;
   getStats(): Promise<RTCStatsReport>;
   /** Pegel 0..1 des zuletzt empfangenen Audiopakets; 0, wenn älter als 500 ms. */
@@ -36,6 +43,9 @@ export class PeerLink implements PeerLinkLike {
   readonly pc: RTCPeerConnection;
   cid = '';
   name = '';
+  remoteMuted = false;
+  private localMuted = false;
+  private readonly ctl: RTCDataChannel;
   private makingOffer = false;
   private ignoreOffer = false;
   private iceFailures = 0;
@@ -45,7 +55,14 @@ export class PeerLink implements PeerLinkLike {
 
   constructor(private readonly o: PeerLinkOptions) {
     const pc = (this.pc = new RTCPeerConnection({ iceServers: o.iceServers }));
-    pc.createDataChannel('ctl', { negotiated: true, id: 0 });
+    const ctl = (this.ctl = pc.createDataChannel('ctl', { negotiated: true, id: 0 }));
+    ctl.onopen = () => this.sendState();
+    ctl.onmessage = (e) => {
+      const m = parseCtl(e.data);
+      if (!m) return;
+      this.remoteMuted = m.muted;
+      o.onRemoteState();
+    };
     if (o.localStream) {
       for (const t of o.localStream.getAudioTracks()) pc.addTrack(t, o.localStream);
     } else {
@@ -97,6 +114,20 @@ export class PeerLink implements PeerLinkLike {
 
   get state(): RTCPeerConnectionState {
     return this.pc.connectionState;
+  }
+
+  setLocalMuted(m: boolean): void {
+    this.localMuted = m;
+    this.sendState();
+  }
+
+  private sendState(): void {
+    if (this.ctl.readyState !== 'open') return;
+    try {
+      this.ctl.send(encodeCtl({ type: 'state', muted: this.localMuted }));
+    } catch (err) {
+      console.warn('[plaudr] Kontrollkanal sendet nicht', err);
+    }
   }
 
   /** Verarbeitet Signaling-Nachrichten strikt nacheinander, damit ICE nie vor der Remote-Description landet. */

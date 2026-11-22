@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { PeerLink } from './peer-link';
 
 class FakePC {
@@ -36,7 +36,10 @@ class FakePC {
   async setRemoteDescription(d: RTCSessionDescriptionInit) {
     this.signalingState = d.type === 'offer' ? 'have-remote-offer' : 'stable';
   }
-  createDataChannel() { return {}; }
+  channel: { readyState: string; sent: string[]; send(d: string): void; onopen?: () => void; onmessage?: (e: { data: unknown }) => void } = {
+    readyState: 'connecting', sent: [], send(d: string) { this.sent.push(d); },
+  };
+  createDataChannel() { return this.channel; }
   addTransceiver() { return {}; }
   addTrack() { return {}; }
   restartIce() { this.restarts++; }
@@ -53,15 +56,18 @@ let states: RTCPeerConnectionState[];
 let sent: { kind: string; body: any }[];
 let link: PeerLink;
 let pc: FakePC;
+let remoteStates: number;
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal('RTCPeerConnection', FakePC);
   states = [];
+  remoteStates = 0;
   sent = [];
   link = new PeerLink({
     peerId: 'B', polite: false, iceServers: [], localStream: null,
     send: (kind, body) => sent.push({ kind, body }), onTrack: () => {}, onState: (s) => states.push(s),
+    onRemoteState: () => remoteStates++,
   });
   pc = FakePC.last;
 });
@@ -140,4 +146,29 @@ test('ein kaputter Kandidat im Bündel verwirft die anderen nicht', async () => 
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   await link.handle({ kind: 'ice', from: 'B', to: 'A', cid: 'c', ts: 0, nonce: 'n', body: { c: [{ candidate: 'eins' }, { candidate: 'kaputt' }, { candidate: 'drei' }] } });
   expect(pc.added).toEqual(['eins', 'drei']);
+});
+
+describe('Kontrollkanal', () => {
+  const open = () => { pc.channel.readyState = 'open'; pc.channel.onopen!(); };
+  test('Stumm-Status vor open wird nur gemerkt und beim Öffnen gesendet', () => {
+    link.setLocalMuted(true);
+    expect(pc.channel.sent).toEqual([]);
+    open();
+    expect(pc.channel.sent).toEqual(['{"type":"state","muted":true}']);
+  });
+  test('jede Änderung nach open wird gesendet', () => {
+    open();
+    link.setLocalMuted(true);
+    link.setLocalMuted(false);
+    expect(pc.channel.sent.map((s) => JSON.parse(s).muted)).toEqual([false, true, false]);
+  });
+  test('empfangener state setzt remoteMuted und meldet die Änderung, Unbekanntes nicht', () => {
+    pc.channel.onmessage!({ data: '{"type":"state","muted":true}' });
+    expect(link.remoteMuted).toBe(true);
+    expect(remoteStates).toBe(1);
+    pc.channel.onmessage!({ data: 'müll' });
+    pc.channel.onmessage!({ data: new ArrayBuffer(4) });
+    expect(link.remoteMuted).toBe(true);
+    expect(remoteStates).toBe(1);
+  });
 });

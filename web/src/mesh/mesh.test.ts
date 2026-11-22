@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { Mesh, type SignalingLike } from './mesh';
+import { Mesh, type PeerView, type SignalingLike } from './mesh';
 import type { PeerLinkLike, PeerLinkOptions } from './peer-link';
 import type { Bodies, Kind, Payload } from '../signaling/types';
 
@@ -28,6 +28,8 @@ class FakeLink implements PeerLinkLike {
   state: RTCPeerConnectionState = 'new';
   handled: Payload[] = [];
   closed = false;
+  remoteMuted = false;
+  localMuted: boolean[] = [];
   constructor(readonly opts: PeerLinkOptions) {}
   get peerId() { return this.opts.peerId; }
   async handle(p: Payload) { this.handled.push(p); }
@@ -35,6 +37,7 @@ class FakeLink implements PeerLinkLike {
   audioLevel() { return 0; }
   senderTrackId() { return null; }
   remoteSdp() { return null; }
+  setLocalMuted(m: boolean) { this.localMuted.push(m); }
   close() { this.closed = true; }
 }
 
@@ -43,6 +46,7 @@ let links: FakeLink[];
 let gone: string[];
 let mesh: Mesh;
 let hellos: [string, string][];
+let changes: PeerView[][];
 
 const hello = (from: string, cid = 'c-' + from, name = from, sid = 'S-' + from) =>
   sig.emitMsg({ kind: 'hello', from, cid, body: { pub: 'PUB-' + from, sid, name, caps: [] } });
@@ -54,10 +58,11 @@ beforeEach(() => {
   links = [];
   gone = [];
   hellos = [];
+  changes = [];
   mesh = new Mesh({
     signaling: sig, selfId: 'M', selfPub: 'PUB-M', sid: 'S-M', name: 'Mira', localStream: null, iceServers: [],
     createLink: (o) => { const l = new FakeLink(o); links.push(l); return l; },
-    onTrack: () => {}, onPeerGone: (id) => gone.push(id), onChange: () => {},
+    onTrack: () => {}, onPeerGone: (id) => gone.push(id), onChange: (p) => changes.push(p),
     onHello: (id, n) => hellos.push([id, n]),
   });
   mesh.start();
@@ -93,12 +98,12 @@ describe('hello', () => {
     expect(links).toHaveLength(0);
     expect(sig.sent).toEqual([]);
     sig.emitMsg({ kind: 'offer', from: 'C', body: { sdp: 'x' } });
-    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', state: 'new' }]);
+    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', state: 'new', muted: false }]);
   });
   test('ein Peer aus einem offer bekommt seinen Namen aus dem späteren hello', () => {
     sig.emitMsg({ kind: 'offer', from: 'C', body: { sdp: 'x' } });
     hello('C', 'c-C', 'Cem');
-    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', state: 'new' }]);
+    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', state: 'new', muted: false }]);
   });
   test('eigene Nachrichten werden ignoriert', () => {
     hello('M');
@@ -252,4 +257,32 @@ test('zweites leave sendet kein zweites bye', async () => {
   await mesh.leave();
   await mesh.leave();
   expect(sig.sent.filter((m) => m.kind === 'bye')).toHaveLength(1);
+});
+
+describe('Stumm-Status', () => {
+  test('setMuted erreicht bestehende und später angelegte Links', () => {
+    hello('B');
+    mesh.setMuted(true);
+    expect(linksFor('B')[0].localMuted.at(-1)).toBe(true);
+    hello('C');
+    expect(linksFor('C')[0].localMuted).toEqual([true]);
+  });
+  test('remoteMuted erscheint in peers() und löst onChange aus', () => {
+    hello('B');
+    const l = linksFor('B')[0];
+    changes = [];
+    l.remoteMuted = true;
+    l.opts.onRemoteState();
+    expect(mesh.peers()[0].muted).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(changes[0][0].muted).toBe(true);
+  });
+  test('onRemoteState eines alten Links wird ignoriert', () => {
+    hello('A');
+    const old = linksFor('A')[0];
+    old.opts.onState('failed');
+    changes = [];
+    old.opts.onRemoteState();
+    expect(changes).toEqual([]);
+  });
 });

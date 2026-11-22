@@ -12,6 +12,7 @@ export interface PeerView {
   peerId: string;
   name: string;
   state: RTCPeerConnectionState;
+  muted: boolean;
 }
 
 export interface MeshOptions {
@@ -37,6 +38,7 @@ export class Mesh {
   private readonly pendingNames = new Map<string, string>();
   private readonly sids = new Map<string, string>();
   private left = false;
+  private muted = false;
   private readonly sid: string;
   private readonly leaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly createLink: (o: PeerLinkOptions) => PeerLinkLike;
@@ -61,7 +63,13 @@ export class Mesh {
   }
 
   peers(): PeerView[] {
-    return [...this.links.values()].map((l) => ({ peerId: l.peerId, name: l.name, state: l.state }));
+    return [...this.links.values()].map((l) => ({ peerId: l.peerId, name: l.name, state: l.state, muted: l.remoteMuted }));
+  }
+
+  /** Eigener Stumm-Status; geht an alle Links und an später angelegte. */
+  setMuted(m: boolean): void {
+    this.muted = m;
+    for (const l of this.links.values()) l.setLocalMuted(m);
   }
 
   /** Empfangene Audio-Bytes je Peer, für Diagnose und Tests. */
@@ -169,6 +177,9 @@ export class Mesh {
       onTrack: (s) => {
         if (isCurrent()) this.o.onTrack(peerId, s);
       },
+      onRemoteState: () => {
+        if (isCurrent()) this.changed();
+      },
       onState: (state) => {
         if (!isCurrent()) return;
         if (state === 'failed') {
@@ -186,6 +197,7 @@ export class Mesh {
     link.name = name || (this.pendingNames.get(peerId) ?? '');
     this.pendingNames.delete(peerId);
     this.links.set(peerId, link);
+    link.setLocalMuted(this.muted);
     this.changed();
     return link;
   }
