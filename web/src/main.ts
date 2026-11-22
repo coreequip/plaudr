@@ -235,24 +235,41 @@ async function join(secret: string): Promise<void> {
     if (p.mode !== undefined) syncMuted();
     await capture?.update(p);
   };
+  // Nach Auto-Beitritt ohne Geste: jede Berührung, jeder Klick, jede Taste versucht es, nicht nur „Ton aktivieren“.
+  // pointerdown per Touch und manche Tasten (Escape) geben keine Nutzeraktivierung; deshalb pointerup und click,
+  // und Knopf wie Listener bleiben, bis Wiedergabe und Aufnahme wirklich laufen.
+  const GESTURES = ['pointerup', 'click', 'keydown'] as const;
+  let armed = false;
+  let trying = false;
+  const tryResume = async () => {
+    if (trying) return;
+    trying = true;
+    try {
+      const playing = await view.resumeAllAudio();
+      // Ohne Aktivierung löst resume() nie auf: kurz warten, dann am Zustand ablesen.
+      if (capture) await Promise.race([capture.resume().catch(() => {}), new Promise((r) => setTimeout(r, 300))]);
+      if (!playing || capture?.needsGesture()) return;
+      $('unmute-audio').hidden = true;
+      armed = false;
+      for (const g of GESTURES) removeEventListener(g, onGesture, true);
+    } finally {
+      trying = false;
+    }
+  };
+  const onGesture = () => void tryResume();
+  const arm = () => {
+    $('unmute-audio').hidden = false;
+    if (armed) return;
+    armed = true;
+    for (const g of GESTURES) addEventListener(g, onGesture, true);
+  };
+  $('unmute-audio').onclick = onGesture;
+  view.onPlaybackBlocked(arm);
+  if (capture?.needsGesture()) arm();
+
   syncMuted();
   callPeers = () => mesh.peers();
   mesh.start();
-
-  if (capture?.needsGesture()) $('unmute-audio').hidden = false;
-  const resumeAll = () => {
-    view.resumeAllAudio();
-    void capture?.resume();
-  };
-  $('unmute-audio').onclick = resumeAll;
-  // Nach Auto-Beitritt ohne Geste: die erste Berührung oder Taste irgendwo reicht, nicht nur „Ton aktivieren“.
-  const onFirstGesture = () => {
-    removeEventListener('pointerdown', onFirstGesture, true);
-    removeEventListener('keydown', onFirstGesture, true);
-    resumeAll();
-  };
-  addEventListener('pointerdown', onFirstGesture, true);
-  addEventListener('keydown', onFirstGesture, true);
 
   const controls = initControls({ capture, settings: () => settings, setSettings });
   callAudio = { settings: () => settings, set: setSettings, activity: () => capture?.activity() ?? null, render: controls.render };
@@ -373,7 +390,7 @@ function boot(): void {
     void prepareLobby().then(() => settings.refreshIdentity());
   };
   $('call-settings').onclick = () => openSettings('call');
-  $('unmute-audio').onclick = view.resumeAllAudio;
+  $('unmute-audio').onclick = () => void view.resumeAllAudio();
   addEventListener('pagehide', closeTestCapture);
 
   let first = true;

@@ -177,14 +177,25 @@ export function attachAudio(peerId: string, stream: MediaStream): void {
   }
   el.volume = volumeOf(peerId);
   el.srcObject = stream;
-  el.play().catch(() => ($('unmute-audio').hidden = false));
+  el.play().catch(() => {
+    $('unmute-audio').hidden = false;
+    playbackBlocked();
+  });
 }
 
 export function detachAudio(peerId: string): void {
   audioFor(peerId)?.remove();
 }
 
-export function resumeAllAudio(): void {
-  for (const el of document.querySelectorAll<HTMLAudioElement>('#audio audio')) void el.play().catch(() => {});
-  $('unmute-audio').hidden = true;
+let playbackBlocked: () => void = () => {};
+/** Wird gerufen, wenn der Browser die Wiedergabe ohne Nutzergeste verweigert. */
+export function onPlaybackBlocked(f: () => void): void {
+  playbackBlocked = f;
+}
+
+/** Startet alle Wiedergaben; true, wenn jede wirklich läuft (ohne Nutzergeste lehnt play() ab). */
+export async function resumeAllAudio(): Promise<boolean> {
+  const all = [...document.querySelectorAll<HTMLAudioElement>('#audio audio')];
+  const results = await Promise.all(all.map((el) => el.play().then(() => true, () => false)));
+  return results.every(Boolean);
 }

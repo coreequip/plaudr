@@ -251,7 +251,7 @@ Erreichbar aus den Räumen und aus dem Gespräch (das Gespräch läuft weiter).
   Desktop-Client globale Taste aufnehmen, ohne Vorgabe (Abschnitt 8).
 - **Mikrofon:** Eingabegerät (wird gemerkt, fehlt es, gilt das Standardgerät),
   Schwelle für „Automatisch“ in Prozent (50 bis 99 %) mit Live-Pegel, Rauschunterdrückung.
-- **Darstellung:** System, Hell oder Dunkel; Farbton 0 bis 360°. Nur der Farbton ist
+- **Darstellung:** System, Hell oder Dunkel; Farbton 0 bis 359°. Nur der Farbton ist
   frei, Sättigung und Helligkeit wählt plaudr so, dass Kontrast ≥ 4,5 : 1 bleibt.
   „Standardfarbe (Grün)“ setzt zurück. Gilt je Gerät.
 - **Identität:** Name (änderbar), 4 Wörter zum Vergleichen am Telefon (Abschnitt 4),
