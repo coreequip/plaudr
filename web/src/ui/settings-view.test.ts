@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { accentFor, contrast } from './theme';
-import { DEFAULT_HUE, previewColors, wordsLine } from './settings-view';
+import { acceleratorFrom } from '../platform/shortcut';
+import { DEFAULT_HUE, previewColors, pttInvalid, wordsLine } from './settings-view';
 
 describe('Einstellungen', () => {
   it('setzt die vier Wörter mit Mittelpunkt zusammen', () => {
@@ -20,5 +21,19 @@ describe('Einstellungen', () => {
   });
   it('Standardfarbton liegt beim Standardgrün', () => {
     expect(DEFAULT_HUE).toBe(128);
+  });
+  it('Hinweis bei ungültiger Taste nennt die Modifikatoren des Systems', () => {
+    expect(pttInvalid('mac')).toBe('Nimm eine Taste mit ⌥, ⌘, Strg oder Umschalt, oder F13 bis F24.');
+    expect(pttInvalid('windows')).toBe('Nimm eine Taste mit Strg, Alt, Umschalt oder Win, oder F13 bis F24.');
+    expect(pttInvalid('other')).toBe(pttInvalid('windows'));
+  });
+  it('unter Windows nimmt acceleratorFrom genau Strg, Alt, Umschalt und Win an', () => {
+    const k = { key: 'p', code: 'KeyP', altKey: false, ctrlKey: false, metaKey: false, shiftKey: false };
+    expect(acceleratorFrom({ ...k, ctrlKey: true }, 'windows')).toBe('CommandOrControl+KeyP');
+    expect(acceleratorFrom({ ...k, altKey: true }, 'windows')).toBe('Alt+KeyP');
+    expect(acceleratorFrom({ ...k, shiftKey: true }, 'windows')).toBe('Shift+KeyP');
+    expect(acceleratorFrom({ ...k, metaKey: true }, 'windows')).toBe('Super+KeyP');
+    expect(acceleratorFrom(k, 'windows')).toBeNull();
+    expect(acceleratorFrom({ ...k, code: 'F13', key: 'F13' }, 'windows')).toBe('F13');
   });
 });

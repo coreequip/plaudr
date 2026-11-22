@@ -39,14 +39,16 @@ Gemessen lokal mit Version 0.1.0 (Rust 1.98.1, mit Updater, `opt-level = "z"`, a
 | `plaudr.app`, nur arm64 | 3 574 373 Bytes |
 | `plaudr.app.tar.gz`, universal (Update-Artefakt) | 4 235 916 Bytes |
 | `plaudr.exe` (cargo-xwin, vor dem Updater) | 3 132 928 Bytes |
-| `plaudr_<Version>_universal.dmg` (CI) | noch offen, nach dem ersten Lauf eintragen |
-| `plaudr_<Version>_x64-setup.exe` (CI) | noch offen, nach dem ersten Lauf eintragen |
+| `plaudr_<Version>_universal.dmg` (CI, vor dem Updater) | 3,98 MiB |
+| `plaudr_<Version>_x64-setup.exe` (CI, vor dem Updater) | 1,5 MiB |
 
 ## Updates
 
 Die App fragt beim Start und danach alle 6 Stunden
 `https://github.com/coreequip/plaudr/releases/latest/download/latest.json` ab, aber nie während eines
-Gesprächs. Gibt es eine neuere Version, steht auf dem Startbildschirm „Neue Version <v> verfügbar.“ mit dem
+Gesprächs. „Beim Start“ heißt bei jedem Laden der Seite: Verlassen eines Raums und Raumwechsel laden neu und
+prüfen also ebenfalls, der Abstand von 6 Stunden ist nur ein Höchstwert. Gedrosselt wird bewusst nicht, denn
+gleich nach dem Verlassen eines Gesprächs soll ein dort zurückgehaltener Hinweis erscheinen. Gibt es eine neuere Version, steht auf dem Startbildschirm „Neue Version <v> verfügbar.“ mit dem
 Knopf „Jetzt aktualisieren“. Der lädt das Update, prüft seine Signatur gegen den öffentlichen Schlüssel in
 `desktop/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`), installiert es und startet plaudr neu. Unter
 Windows beendet der Installer die App dabei selbst. Fehler beim Prüfen (offline, kein Release) zeigt die

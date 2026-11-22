@@ -151,10 +151,21 @@ taggen, Entwurf veröffentlichen, 0.1.0 auf beiden Systemen installieren; dann V
 | 56 | beide | Release-Entwurf 0.1.1 ansehen | enthält `latest.json` mit `version` 0.1.1 und den Plattformen `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`; je eine `.sig` zu `.app.tar.gz` und `-setup.exe` | |
 | 57 | beide | 0.1.1 noch Entwurf; plaudr 0.1.0 starten | kein Hinweis auf dem Startbildschirm (`releases/latest` ist noch 0.1.0) | |
 | 58 | beide | Entwurf 0.1.1 veröffentlichen (nicht als Pre-Release), plaudr 0.1.0 neu starten | Startbildschirm zeigt „Neue Version 0.1.1 verfügbar.“ und „Jetzt aktualisieren“ | |
-| 59 | beide | wie 55, aber plaudr startet per Auto-Beitritt direkt ins Gespräch | im Gespräch kein Hinweis, nichts wird geladen; nach „Verlassen“ erscheint der Hinweis | |
+| 59 | beide | wie 58, aber plaudr startet per Auto-Beitritt direkt ins Gespräch | im Gespräch kein Hinweis, nichts wird geladen; nach „Verlassen“ erscheint der Hinweis | |
 | 60 | macOS | „Jetzt aktualisieren“ | Knopf gesperrt, nach kurzer Zeit startet plaudr neu; „About plaudr“ im App-Menü zeigt 0.1.1, Identität, Räume und PTT-Taste sind noch da, kein neuer Hinweis | |
 | 61 | Windows | „Jetzt aktualisieren“ | plaudr beendet sich, der Installer läuft ohne Rückfragen (passiv, Fortschrittsfenster) und startet plaudr neu; „Apps“ in den Windows-Einstellungen zeigt 0.1.1, Tray-Symbol nur einmal, Identität und Räume sind noch da | |
 | 62 | beide | ohne Netz starten | kein Hinweis, keine Fehlermeldung; in der Web-Konsole nur eine Warnung „Suche nach Updates fehlgeschlagen“ | |
-| 63 | macOS | ad-hoc-signierte Fassung: nach dem Update Raum betreten | ggf. erneute Mikrofonabfrage (neue ad-hoc-Signatur), danach Ton wie in 47 | |
+| 63 | macOS | ad-hoc-signierte Fassung: nach dem Update Raum betreten | ggf. erneute Mikrofonabfrage (neue ad-hoc-Signatur), danach Ton wie in 50 | |
+
+## Lange im Tray
+
+WKWebView hält versteckte Fenster ohne Gegenmaßnahme an und kann sie nach etwa 5 Minuten ganz stoppen. Die App
+setzt deshalb `backgroundThrottling: "disabled"` (wirkt ab macOS 14). WebView2 kennt die Einstellung nicht;
+ob ein verstecktes Fenster dort weiterläuft, zeigt nur die Probe.
+
+| # | Plattform | Prüfung | Erwartung | Ergebnis |
+|---|---|---|---|---|
+| 64 | macOS | Im Gespräch mit dem Browser-Tab das Fenster schließen (Tray), mindestens 10 Minuten warten, dann die globale Taste halten und sprechen | das Gegenüber hört dich, du hörst das Gegenüber; kein Neuverbinden (im Browser-Tab kein Verschwinden und Wiederkommen), Tray-Symbol wird grün | |
+| 65 | Windows | wie 64 | wie 64 | |
 
 Die Spalte „Ergebnis“ füllst du beim Prüfen aus; Auffälligkeiten fließen in die Spec (§8) zurück.

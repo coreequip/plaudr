@@ -68,6 +68,7 @@ let callAudio: {
 
 // Plattform (Browser oder Desktop). Die Aktionen greifen auf das laufende Gespräch zu, sobald es eines gibt.
 let callActions: Pick<AppActions, 'setMode' | 'setPressed'> | null = null;
+/** Bleibt nach dem Verlassen gesetzt: Ein zweiter Aufruf (etwa Beenden gleich nach „Raum verlassen“) wartet auf dasselbe Verlassen. */
 let callLeave: (() => Promise<void>) | null = null;
 const appActions: AppActions = {
   setMode: (m) => callActions?.setMode(m),
@@ -348,7 +349,6 @@ async function join(secret: string): Promise<void> {
       sending = false;
       report(false);
       callActions = null;
-      callLeave = null;
       await mesh.leave();
     })());
   callLeave = leaveCall;

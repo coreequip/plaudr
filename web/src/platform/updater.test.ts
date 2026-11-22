@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { startUpdater, updateText, UPDATE_INTERVAL_MS, type PendingUpdate, type UpdaterDeps } from './updater';
+import { startUpdater, UPDATE_FAILED, updateText, UPDATE_INTERVAL_MS, type PendingUpdate, type UpdaterDeps } from './updater';
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
@@ -22,6 +22,7 @@ function setup(over: Partial<UpdaterDeps> = {}) {
     leave: async () => void log.push('leave'),
     show: (v) => log.push(`show ${v}`),
     busy: (on) => log.push(`busy ${on}`),
+    failed: () => log.push('failed'),
     ...over,
   };
   return {
@@ -39,6 +40,7 @@ describe('startUpdater', () => {
 
   test('Text des Hinweises', () => {
     expect(updateText('0.2.0')).toBe('Neue Version 0.2.0 verfügbar.');
+    expect(UPDATE_FAILED).toBe('Das Update ist fehlgeschlagen. Versuch es später noch einmal.');
   });
 
   test('prüft beim Start, zeigt die Version, prüft alle 6 h wieder', async () => {
@@ -130,14 +132,14 @@ describe('startUpdater', () => {
     warn.mockRestore();
   });
 
-  test('Fehler bei der Installation: Knopf wieder frei, kein Neustart', async () => {
+  test('Fehler bei der Installation: Knopf wieder frei, Hinweis, kein Neustart', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const t = setup();
     t.setNext({ version: '0.2.0', downloadAndInstall: () => Promise.reject(new Error('Signatur ungültig')), close: async () => {} });
     const u = startUpdater(t.deps);
     await flush();
     await u.install();
-    expect(t.log).toEqual(['check', 'show 0.2.0', 'busy true', 'leave', 'busy false']);
+    expect(t.log).toEqual(['check', 'show 0.2.0', 'busy true', 'leave', 'busy false', 'failed']);
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
     u.stop();

@@ -2,6 +2,7 @@
 export const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const UPDATE_BUTTON = 'Jetzt aktualisieren';
 export const updateText = (version: string) => `Neue Version ${version} verfügbar.`;
+export const UPDATE_FAILED = 'Das Update ist fehlgeschlagen. Versuch es später noch einmal.';
 
 /** Ein angebotenes Update (tauri-plugin-updater: Update). */
 export interface PendingUpdate {
@@ -26,6 +27,8 @@ export interface UpdaterDeps {
    * die App beim Installieren, macOS startet neu). false nach einem Fehler.
    */
   busy(on: boolean): void;
+  /** Installieren ist gescheitert: Hinweis im Update-Feld, bis zum nächsten Versuch. */
+  failed(): void;
   intervalMs?: number;
 }
 
@@ -86,6 +89,7 @@ export function startUpdater(d: UpdaterDeps): Updater {
       console.warn('[plaudr] Update fehlgeschlagen', err);
       installing = false;
       d.busy(false);
+      d.failed();
     }
   }
 

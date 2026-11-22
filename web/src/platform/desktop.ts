@@ -20,7 +20,7 @@ import { createPttShortcut, loadDesktopPrefs, saveDesktopPrefs } from './desktop
 import { activeShortcutLabel, detectOs, type AppActions, type AppState, type Autostart, type Platform } from './platform';
 import { GlobalPtt, type ShortcutApi } from './shortcut';
 import { trayModel, type TrayItemId, type TrayModel } from './tray-model';
-import { startUpdater, UPDATE_BUTTON, updateText } from './updater';
+import { startUpdater, UPDATE_BUTTON, UPDATE_FAILED, updateText } from './updater';
 import { webPlatform } from './web';
 
 /** Anbindung an tauri-plugin-global-shortcut. Nur dieser Chunk darf @tauri-apps laden. */
@@ -219,10 +219,22 @@ export function desktopPlatform(actions: AppActions): Platform {
     inCall: () => !!state?.inCall || document.getElementById('call')?.hidden === false,
     leave: leaveAtMost,
     show: showUpdate,
+    failed: () => {
+      const card = document.getElementById('update');
+      if (!card || document.getElementById('update-error')) return;
+      const err = document.createElement('span');
+      err.id = 'update-error';
+      err.className = 'field-error';
+      err.setAttribute('role', 'alert');
+      err.textContent = UPDATE_FAILED;
+      card.append(err);
+    },
     busy: (on) => {
       updating = on;
       const b = document.querySelector<HTMLButtonElement>('#update-install');
       if (b) b.disabled = on;
+      // Ein neuer Versuch nimmt den alten Fehlerhinweis weg.
+      if (on) document.getElementById('update-error')?.remove();
       // Alles sperren (Klick und Tastatur), damit bis zum Neustart niemand einem Raum beitritt.
       const main = document.querySelector('main');
       if (main) main.inert = on;

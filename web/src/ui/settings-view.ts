@@ -3,7 +3,7 @@ import { listMics, micChoices } from '../audio/devices';
 import type { AudioSettings } from '../audio/settings';
 import type { Identity } from '../crypto/identity';
 import type { PeerView } from '../mesh/mesh';
-import type { Autostart, PttShortcut } from '../platform/platform';
+import { detectOs, type Autostart, type Platform, type PttShortcut } from '../platform/platform';
 import { recordKey } from '../platform/shortcut';
 import { fingerprintWords } from '../crypto/words';
 import { mountBackupPanel, showBackupState } from './backup-panel';
@@ -74,7 +74,11 @@ export function previewColors(hue: number | null): { light: PreviewColors; dark:
   };
 }
 
-export const PTT_INVALID = 'Nimm eine Taste mit ⌥, ⌘, Strg oder Umschalt, oder F13 bis F24.';
+/** Hinweis bei ungültiger Taste; nennt die Modifikatoren, die acceleratorFrom auf diesem System annimmt. */
+export const pttInvalid = (os: Platform['os']): string =>
+  os === 'mac'
+    ? 'Nimm eine Taste mit ⌥, ⌘, Strg oder Umschalt, oder F13 bis F24.'
+    : 'Nimm eine Taste mit Strg, Alt, Umschalt oder Win, oder F13 bis F24.';
 export const PTT_TAKEN = 'Diese Taste ist schon vergeben. Nimm eine andere.';
 export const AUTOSTART_READ_FAILED = 'Ob plaudr beim Anmelden startet, ließ sich nicht abfragen.';
 export const AUTOSTART_SET_FAILED = 'Das System hat den Start beim Anmelden nicht übernommen.';
@@ -286,7 +290,7 @@ export function initSettings(o: SettingsOptions): SettingsView {
       if (e.repeat) return;
       const step = recordKey(e);
       if (step.kind === 'wait') return;
-      if (step.kind === 'invalid') return showKeyError(PTT_INVALID);
+      if (step.kind === 'invalid') return showKeyError(pttInvalid(detectOs()));
       lastCode = e.code;
       stop();
       addEventListener('keyup', onKeyUp, true);

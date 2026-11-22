@@ -34,6 +34,9 @@ declare global {
       /** Version, die tauri-plugin-updater bei check meldet (null = kein Update), und die Zahl der Prüfungen. */
       update: string | null;
       checks: number;
+      /** Geschlossene WebSockets (Signaling), und wie viele es beim Aufruf von exit waren. */
+      wsClosed: number;
+      wsClosedAtExit: number | null;
     };
   }
 }
@@ -44,7 +47,7 @@ declare global {
  * Fenster und Beenden, die der Test bedient.
  * Im Browser ohne diese Attrappe bleibt alles beim Alten (Tests oben).
  */
-function fakeTauri(opts?: { startLinks?: string[]; update?: string; hangDownload?: boolean }): void {
+function fakeTauri(opts?: { startLinks?: string[]; update?: string; hangDownload?: boolean; failDownload?: boolean }): void {
   const callbacks = new Map<number, (m: unknown) => void>();
   const handlers = new Map<string, { id: number; index: number }>();
   let next = 1;
@@ -100,8 +103,15 @@ function fakeTauri(opts?: { startLinks?: string[]; update?: string; hangDownload
     },
     update: opts?.update ?? null,
     checks: 0,
+    wsClosed: 0,
+    wsClosedAtExit: null,
   };
   window.fakeApp = app;
+  const wsClose = WebSocket.prototype.close;
+  WebSocket.prototype.close = function (this: WebSocket, ...a: Parameters<WebSocket['close']>) {
+    app.wsClosed++;
+    return wsClose.apply(this, a);
+  };
   // getCurrent: der Startlink, nach einem weiteren Link dieser (das Plugin merkt sich den letzten im Prozess).
   const currentLinks = () => JSON.parse(sessionStorage.getItem('fake.deepLink') ?? 'null') ?? opts?.startLinks ?? null;
   type Args = Record<string, unknown> & { shortcuts?: string[]; handler?: { id: number } };
@@ -219,6 +229,9 @@ function fakeTauri(opts?: { startLinks?: string[]; update?: string; hangDownload
         }
         case 'plugin:process|exit':
           app.exitCode = args.code as number;
+          app.wsClosedAtExit ??= app.wsClosed;
+          // Überlebt ein Neuladen, das „Raum verlassen“ gleichzeitig anstößt.
+          sessionStorage.setItem('fake.exit', JSON.stringify({ code: args.code, wsClosed: app.wsClosed }));
           app.calls.push('exit');
           return null;
         case 'plugin:process|restart':
@@ -231,6 +244,7 @@ function fakeTauri(opts?: { startLinks?: string[]; update?: string; hangDownload
           app.calls.push('updater|download_and_install');
           // Hängender Download: Die Installation endet nie, die App bleibt im Zustand „wird installiert“.
           if (opts?.hangDownload) await new Promise(() => {});
+          if (opts?.failDownload) throw 'Signatur ungültig';
           return null;
         case 'plugin:resources|close':
           return null;
@@ -272,7 +286,8 @@ test('Desktop: Taste aufnehmen, ungültig, vergeben, entfernen', async ({ browse
   // Ohne Modifikator ungültig, die Aufnahme läuft weiter; Escape bricht ab.
   await page.click('#ptt-record');
   await page.keyboard.press('p');
-  await expect(page.locator('#ptt-key-error')).toHaveText('Nimm eine Taste mit ⌥, ⌘, Strg oder Umschalt, oder F13 bis F24.');
+  // „Desktop Chrome“ meldet sich als Windows: Hinweis mit den Windows-Modifikatoren.
+  await expect(page.locator('#ptt-key-error')).toHaveText('Nimm eine Taste mit Strg, Alt, Umschalt oder Win, oder F13 bis F24.');
   await page.keyboard.press('Escape');
   await expect(page.locator('#ptt-key')).toHaveText('keine Taste');
   await expect(page.locator('#ptt-key-error')).toBeHidden();
@@ -491,6 +506,31 @@ for (const [wie, ausloesen] of [
   });
 }
 
+test('Desktop: Beenden gleich nach „Raum verlassen“ wartet auf das Verlassen', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri);
+  const hash = roomHash('desktopleavequit');
+  await page.goto('/' + hash);
+  await join(page, 'Anna');
+  const ben = await open(browser, hash);
+  await join(ben, 'Ben');
+  await expectMesh([page, ben], 1);
+
+  await page.evaluate(() => {
+    window.fakeApp!.click('Raum verlassen');
+    window.fakeApp!.click('plaudr beenden');
+  });
+  // „Raum verlassen“ lädt die Seite neu; exit steht deshalb im sessionStorage.
+  const exitRecord = () =>
+    page.evaluate(() => JSON.parse(sessionStorage.getItem('fake.exit') ?? 'null')).catch(() => null);
+  await expect.poll(exitRecord).not.toBeNull();
+  // exit erst, nachdem das Signaling (mit dem bye) geschlossen ist.
+  const rec = await exitRecord();
+  expect(rec.code).toBe(0);
+  expect(rec.wsClosed).toBeGreaterThan(0);
+  await expect.poll(() => peerCount(ben), { timeout: 3000 }).toBe(0);
+});
+
 const hashOf = (p: Page) => p.evaluate(() => location.hash);
 const menuOf = (p: Page) => p.evaluate(() => window.fakeApp!.menu());
 
@@ -683,6 +723,24 @@ test('Desktop: Update auf dem Startbildschirm, Knopf installiert und startet neu
   await button.click();
   await expect.poll(() => page.evaluate(() => window.fakeApp!.calls)).toEqual(['updater|download_and_install', 'restart']);
   await expect(button).toBeDisabled();
+});
+
+test('Desktop: gescheitertes Update zeigt einen Hinweis, Knopf wieder frei', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri, { update: '0.2.0', failDownload: true });
+  await page.goto('/');
+  await page.click('#update-install');
+  await expect(page.locator('#update-error')).toHaveText('Das Update ist fehlgeschlagen. Versuch es später noch einmal.');
+  await expect(page.locator('#update-install')).toBeEnabled();
+  await expect(page.locator('.update-overlay')).toHaveCount(0);
+  expect(await page.evaluate(() => document.querySelector('main')!.inert)).toBe(false);
+  expect(await page.evaluate(() => window.fakeApp!.calls)).not.toContain('restart');
+
+  // Neuer Versuch: Der alte Hinweis verschwindet und kommt beim nächsten Fehler genau einmal wieder.
+  await page.click('#update-install');
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.calls.filter((c) => c === 'updater|download_and_install').length)).toBe(2);
+  await expect(page.locator('#update-error')).toHaveCount(1);
+  await expect(page.locator('#update-install')).toBeEnabled();
 });
 
 test('Desktop: ohne Update kein Hinweis', async ({ browser }) => {

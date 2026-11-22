@@ -284,7 +284,10 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
 - Zusätze gegenüber dem Browser:
   - globale PTT-Taste über `tauri-plugin-global-shortcut` (Pressed/Released-Ereignisse),
     frei belegbar
-  - Tray-Icon mit Stumm/PTT-Status, Fenster schließen = in den Tray
+  - Tray-Icon mit Stumm/PTT-Status, Fenster schließen = in den Tray. Damit Gespräch und globale Taste im
+    Tray weiterlaufen, setzt das Fenster `backgroundThrottling: "disabled"`: WKWebView hält versteckte
+    Fenster sonst an und stoppt sie nach etwa 5 Minuten (wirkt ab macOS 14, unter Windows ohne Wirkung;
+    Handprobe 64 und 65)
   - Link-Übernahme: `plaudr://`-Deep-Link (`tauri-plugin-deep-link`) und Einfügen eines
     `https://plaudr.room.ws/#…`-Links
   - optional Autostart
