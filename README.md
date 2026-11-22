@@ -44,6 +44,7 @@ cargo xwin build --release --target x86_64-pc-windows-msvc
 Abhängigkeiten sind exakt gepinnt und mindestens zwei Wochen alt; das gilt auch für `Cargo.lock`. Nach
 einer neuen Abhängigkeit die Lockfile mit Stichtag neu auflösen (in `desktop/src-tauri`, Stichtag = heute
 minus zwei Wochen): `RUSTC_BOOTSTRAP=1 cargo -Zunstable-options generate-lockfile --publish-time 2026-11-08T00:00:00Z`.
+Für npm entsprechend `npm install --save-exact --before=2026-11-08 paket@x.y.z`.
 
 Prüfpunkte von Hand: [docs/m4-handprobe.md](docs/m4-handprobe.md).
 

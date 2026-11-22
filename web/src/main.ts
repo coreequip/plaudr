@@ -12,7 +12,7 @@ import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { autoJoinTarget } from './room/auto-join';
 import { canJoin, needsBackup } from './room/join-rule';
-import { loadPlatform, type AppActions, type AppState, type Platform } from './platform/platform';
+import { activeShortcutLabel, loadPlatform, type AppActions, type AppState, type Platform } from './platform/platform';
 import { loadRooms, noteJoin, notePeers, roomTitle, saveRooms } from './room/rooms';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
@@ -311,11 +311,17 @@ async function join(secret: string): Promise<void> {
   callPeers = () => mesh.peers();
   mesh.start();
 
-  const controls = initControls({ capture, settings: () => settings, setSettings });
-  callActions = {
+  const controls = initControls({ capture, settings: () => settings, setSettings, globalKey: () => activeShortcutLabel(platform) });
+  const actions = (callActions = {
     setMode: (m) => void setSettings({ mode: m }).then(controls.render),
     setPressed: controls.setPressed,
-  };
+  });
+  // Die globale Taste wird beim Start der App erst nach und nach belegt: Hinweis am PTT-Knopf nachziehen.
+  void platformReady.then((p) =>
+    p.pttShortcut?.onChange(() => {
+      if (callActions === actions) controls.render();
+    }),
+  );
   capture?.onActivity((a) => {
     if (a.open === sending) return;
     sending = a.open;
@@ -424,6 +430,7 @@ function boot(): void {
     identityInUse: () => callIdentity ?? identity,
     peers: () => callPeers(),
     inCall: () => inCall,
+    pttShortcut: () => platform?.pttShortcut ?? null,
     back: () => {
       closeSettings();
       if (returnTo === 'call') {

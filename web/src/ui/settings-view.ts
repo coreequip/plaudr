@@ -3,6 +3,8 @@ import { listMics, micChoices } from '../audio/devices';
 import type { AudioSettings } from '../audio/settings';
 import type { Identity } from '../crypto/identity';
 import type { PeerView } from '../mesh/mesh';
+import type { PttShortcut } from '../platform/platform';
+import { recordKey } from '../platform/shortcut';
 import { fingerprintWords } from '../crypto/words';
 import { mountBackupPanel, showBackupState } from './backup-panel';
 import type { UiPrefs } from './prefs';
@@ -28,6 +30,8 @@ export interface SettingsOptions {
   peers(): PeerView[];
   /** Im Gespräch gilt ein neuer Name erst beim nächsten Beitritt. */
   inCall(): boolean;
+  /** Globale Push-to-Talk-Taste; null im Browser. */
+  pttShortcut(): PttShortcut | null;
   back(): void;
 }
 
@@ -67,6 +71,9 @@ export function previewColors(hue: number | null): { light: PreviewColors; dark:
     dark: { ...dark, accent: p.dark.accent, accentFg: p.dark.accentFg },
   };
 }
+
+export const PTT_INVALID = 'Nimm eine Taste mit ⌥, ⌘, Strg oder Umschalt, oder F13 bis F24.';
+export const PTT_TAKEN = 'Diese Taste ist schon vergeben. Nimm eine andere.';
 
 const pct = (t: number) => `${Math.round(t * 100)} %`;
 const THEMES: UiPrefs['theme'][] = ['system', 'light', 'dark'];
@@ -225,6 +232,93 @@ export function initSettings(o: SettingsOptions): SettingsView {
   $('settings-backup').onclick = () => openPanel('backup');
   $('settings-restore').onclick = () => openPanel('restore');
 
+  // Push-to-Talk: im Browser nur der Hinweis auf die Leertaste, im Desktop-Client die globale Taste.
+  const keyEl = $('ptt-key');
+  const record = $<HTMLButtonElement>('ptt-record');
+  const remove = $<HTMLButtonElement>('ptt-remove');
+  const keyError = $('ptt-key-error');
+  let stopRecording: (() => void) | null = null;
+  const showKeyError = (text: string | null) => {
+    keyError.textContent = text ?? '';
+    keyError.hidden = !text;
+  };
+  const renderPtt = () => {
+    const k = o.pttShortcut();
+    $('ptt-info').hidden = !!k;
+    $('ptt-desktop').hidden = !k;
+    if (!k || stopRecording) return;
+    const a = k.current();
+    keyEl.textContent = a ? k.label(a) : 'keine Taste';
+    keyEl.classList.remove('recording');
+    record.textContent = 'Neue Taste aufnehmen';
+    record.setAttribute('aria-pressed', 'false');
+    remove.disabled = !a;
+  };
+  const choose = async (k: PttShortcut, accel: string | null) => {
+    record.disabled = remove.disabled = true;
+    try {
+      const r = await k.set(accel);
+      showKeyError(r.ok ? null : PTT_TAKEN);
+    } finally {
+      record.disabled = false;
+      renderPtt();
+    }
+  };
+  // Aufnahme: das nächste gültige keydown im Fenster. Abgefangen in der Capture-Phase, damit die Leertaste
+  // dabei weder sendet noch den Knopf erneut auslöst.
+  const startRecording = (k: PttShortcut) => {
+    if (stopRecording) return;
+    showKeyError(null);
+    keyEl.textContent = '…';
+    keyEl.classList.add('recording');
+    record.textContent = 'Drück die neue Taste';
+    record.setAttribute('aria-pressed', 'true');
+    let lastCode = '';
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      const step = recordKey(e);
+      if (step.kind === 'wait') return;
+      if (step.kind === 'invalid') return showKeyError(PTT_INVALID);
+      lastCode = e.code;
+      stop();
+      addEventListener('keyup', onKeyUp, true);
+      if (step.kind === 'key') void choose(k, step.accel);
+      else showKeyError(null);
+    };
+    // Das Loslassen der aufgenommenen Taste soll den fokussierten Knopf nicht wieder auslösen. Danach weg damit,
+    // spätestens wenn keine Modifikatortaste mehr gehalten wird: Mit ⌘ gedrückt liefert macOS kein keyup der
+    // Haupttaste, und ein hängender Zuhörer würde sonst ein späteres Loslassen der Leertaste verschlucken.
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === lastCode) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if (e.code === lastCode || !(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)) removeEventListener('keyup', onKeyUp, true);
+    };
+    const stop = () => {
+      removeEventListener('keydown', onKeyDown, true);
+      stopRecording = null;
+      renderPtt();
+    };
+    addEventListener('keydown', onKeyDown, true);
+    stopRecording = () => {
+      stop();
+      removeEventListener('keyup', onKeyUp, true);
+    };
+  };
+  record.onclick = () => {
+    const k = o.pttShortcut();
+    if (k) startRecording(k);
+  };
+  remove.onclick = () => {
+    const k = o.pttShortcut();
+    stopRecording?.();
+    showKeyError(null);
+    if (k) void choose(k, null);
+  };
+
   $('settings-back').onclick = () => o.back();
 
   return {
@@ -233,6 +327,8 @@ export function initSettings(o: SettingsOptions): SettingsView {
       renderPrefs();
       renderIdentity();
       renderPeerWords();
+      showKeyError(null);
+      renderPtt();
       nameInput.value = o.name();
       $('settings-name-hint').hidden = !o.inCall();
       done.hidden = true;
@@ -248,6 +344,7 @@ export function initSettings(o: SettingsOptions): SettingsView {
       if (timer) clearInterval(timer);
       timer = null;
       pending = null;
+      stopRecording?.();
       // Zurück in die Lobby, mit dem Zustand, den sie dort braucht (Pflicht oder Angebot).
       $('lobby-notice').after(backup);
       restore.open = false;

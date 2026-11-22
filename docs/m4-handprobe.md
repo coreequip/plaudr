@@ -36,14 +36,19 @@ Stand des Builds: Task 1 von M4 (Gerüst ohne Plattformschicht). Größen beim B
 
 ## Globale Taste (nach Task 3)
 
-Erst prüfbar, wenn die globale PTT-Taste eingebaut ist. Kommt unter einem System kein Loslassen an,
-ist Push-to-Talk dort nicht sicher nutzbar und der Plan muss angepasst werden.
+Kommt unter einem System kein Loslassen an, ist Push-to-Talk dort nicht sicher nutzbar und der Plan muss
+angepasst werden. Die Einstellungs-Oberfläche selbst ist per E2E mit nachgebautem Tauri geprüft
+(`web/e2e/desktop.spec.ts`); offen ist, was nur das echte System zeigt.
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
 |---|---|---|---|---|
-| 11 | macOS | PTT-Taste belegen, in einem anderen Programm halten und loslassen | Drücken öffnet das Gate, Loslassen schließt es (Released kommt an) | |
-| 12 | macOS | Taste halten, dabei Fenster wechseln, dann loslassen | Gate schließt trotzdem, kein Dauersenden | |
-| 13 | Windows | wie 11 | wie 11 | |
-| 14 | Windows | wie 12 | wie 12 | |
+| 11 | macOS | Einstellungen › Push-to-Talk: „Neue Taste aufnehmen“, ⌥ Leertaste drücken | `kbd` zeigt „⌥ Leertaste“, kein Hinweis; im Gespräch (Push-to-Talk) steht unter dem Knopf „oder ⌥ Leertaste überall, auch im Hintergrund“ | |
+| 12 | macOS | Im Gespräch mit Push-to-Talk in einem anderen Programm die Taste halten, dann loslassen | Gegenüber im Browser hört dich, Loslassen schließt das Gate (Released kommt an); das andere Programm bekommt die Taste nicht | |
+| 13 | macOS | Taste halten, dabei Fenster wechseln oder Bildschirm sperren, dann loslassen | Gate schließt trotzdem, kein Dauersenden | |
+| 14 | macOS | Kürzel aufnehmen, das eine andere laufende App global belegt hat (etwa ein Launcher oder Bildschirmfoto-Programm) | „Diese Taste ist schon vergeben. Nimm eine andere.“, die bisherige Taste bleibt und wirkt weiter | |
+| 15 | macOS | App beenden und neu starten | Taste steht wieder in den Einstellungen und wirkt ohne neues Aufnehmen | |
+| 16 | macOS | Taste halten und im Gespräch auf „Automatisch“ wechseln; in „Automatisch“ die Taste drücken | Wechsel beendet das Senden sofort; in „Automatisch“ bewirkt die Taste nichts | |
+| 17 | Windows | wie 11 (Alt+Leertaste, Anzeige „Alt+Leertaste“) | wie 11 | |
+| 18 | Windows | wie 12 bis 16 | wie 12 bis 16 | |
 
 Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.

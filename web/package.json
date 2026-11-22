@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@shiguredo/rnnoise-wasm": "2022.2.0",
+    "@tauri-apps/api": "2.12.4",
+    "@tauri-apps/plugin-global-shortcut": "2.4.1",
     "roomws": "file:../vendor/room_ws/example"
   },
   "devDependencies": {

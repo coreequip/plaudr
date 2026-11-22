@@ -3,6 +3,8 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Globale Push-to-Talk-Taste; belegt und abgemeldet wird sie vom Web-Code (platform/desktop.ts).
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // Das Fenster startet unsichtbar. Mit --hidden (Autostart) bleibt es so,
             // sonst wird es gezeigt, sobald die App bereit ist.

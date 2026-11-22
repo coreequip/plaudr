@@ -18,6 +18,19 @@ export interface AppActions {
   showWindow?(): void;
 }
 
+/** Globale Push-to-Talk-Taste (nur Desktop). */
+export interface PttShortcut {
+  /** Gespeicherte Taste im Tauri-Format, auch wenn sie sich nicht belegen ließ. */
+  current(): string | null;
+  /** false: Die gespeicherte Taste ist von einem anderen Programm vergeben und wirkt nicht. */
+  registered(): boolean;
+  label(accel: string): string;
+  /** Belegt und speichert die Taste (null entfernt). ok: false heißt vergeben; die bisherige bleibt. */
+  set(accel: string | null): Promise<{ ok: boolean }>;
+  /** Wird nach jeder Änderung aufgerufen, auch wenn die Registrierung beim Start erst später fertig wird. */
+  onChange(cb: () => void): void;
+}
+
 export interface Platform {
   readonly kind: 'web' | 'desktop';
   readonly os: 'mac' | 'windows' | 'other';
@@ -26,6 +39,15 @@ export interface Platform {
   openText(accept: string[]): Promise<{ name: string; text: string } | null>;
   /** Wird bei jedem Wechsel des App-Zustands aufgerufen (Tray, globale Taste). Im Browser leer. */
   update(s: AppState): void;
+  /** Nur im Desktop-Client. */
+  readonly pttShortcut?: PttShortcut;
+}
+
+/** Bezeichnung der wirksamen globalen Taste für den Hinweis am PTT-Knopf; null ohne (oder ohne wirksame) Taste. */
+export function activeShortcutLabel(p: Pick<Platform, 'pttShortcut'> | null): string | null {
+  const k = p?.pttShortcut;
+  const a = k?.current();
+  return k && a && k.registered() ? k.label(a) : null;
 }
 
 export function isDesktop(w: Window = window): boolean {

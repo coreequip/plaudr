@@ -149,6 +149,21 @@
           <section class="set-card" aria-labelledby="set-ptt">
             <span id="set-ptt" class="section-label">PUSH-TO-TALK</span>
             <span id="ptt-info" class="set-text">Leertaste, solange plaudr im Vordergrund ist.</span>
+            <div id="ptt-desktop" class="ptt-desktop" hidden>
+              <div class="ptt-key-row">
+                <div class="ptt-key-text">
+                  <span class="ptt-key-title">Globale Taste</span>
+                  <span class="hint">wirkt auch, wenn plaudr im Hintergrund ist</span>
+                </div>
+                <kbd id="ptt-key" class="ptt-key">keine Taste</kbd>
+              </div>
+              <div class="row">
+                <button id="ptt-record" class="outline tall grow-1" aria-describedby="ptt-key-error">Neue Taste aufnehmen</button>
+                <button id="ptt-remove" class="tall">Entfernen</button>
+              </div>
+              <span id="ptt-key-error" class="field-error" role="alert" hidden></span>
+              <div class="set-row set-label"><span>Nachlauf nach dem Loslassen</span><span class="set-strong">150 ms</span></div>
+            </div>
           </section>
 
           <section class="set-card" aria-labelledby="set-mic">

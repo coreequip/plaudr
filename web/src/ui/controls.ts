@@ -20,6 +20,13 @@ export interface ControlsOptions {
   capture: Capture | null;
   settings: () => AudioSettings;
   setSettings: (p: Partial<AudioSettings>) => Promise<void>;
+  /** Bezeichnung der globalen Taste im Desktop-Client (etwa „⌥ Leertaste“); null ohne. */
+  globalKey?: () => string | null;
+}
+
+/** Hinweis unter dem PTT-Knopf: Leertaste, oder im Desktop-Client die globale Taste. */
+export function pttHint(globalKey: string | null): [string, string, string] {
+  return globalKey ? ['oder ', globalKey, ' überall, auch im Hintergrund'] : ['oder ', 'Leertaste', ''];
 }
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
@@ -37,6 +44,7 @@ const HOLD_LABEL = 'Zum Sprechen halten oder antippen';
 /** Sprechmodus, Pegel mit Schwelle (nur Anzeige, der Regler steht in den Einstellungen), PTT, Rauschunterdrückung. */
 export function initControls(o: ControlsOptions): Controls {
   const { capture } = o;
+  const hint = $('ptt').querySelector<HTMLElement>('.ptt-hint')!;
   const showThreshold = (t: number) => {
     $('vad-threshold-label').textContent = `Schwelle ${pct(t)}`;
     $('vad-mark').style.left = `${t * 100}%`;
@@ -50,6 +58,10 @@ export function initControls(o: ControlsOptions): Controls {
     $('vad-meter').hidden = !capture || s.mode !== 'vad';
     showThreshold(s.threshold);
     $<HTMLInputElement>('denoise').checked = s.denoise;
+    const [before, key, after] = pttHint(o.globalKey?.() ?? null);
+    const kbd = document.createElement('kbd');
+    kbd.textContent = key;
+    hint.replaceChildren(before, kbd, after);
   };
 
   for (const m of MODES) {
@@ -98,7 +110,7 @@ export function initControls(o: ControlsOptions): Controls {
   const press = (p: boolean) => (p ? apply(true) : (cancel(), apply(false)));
   const unbindKeys = bindPttKeys(window, press, isTyping, isPtt);
   // Ohne echte Tastatur und Maus (Telefon, Tablet) gibt es keine Leertaste zu erwähnen.
-  ptt.querySelector<HTMLElement>('.ptt-hint')!.hidden = !matchMedia('(hover: hover) and (pointer: fine)').matches;
+  hint.hidden = !matchMedia('(hover: hover) and (pointer: fine)').matches;
 
   const me = $('me-speaking');
   const level = $('vad-level');

@@ -201,6 +201,13 @@ button.link-button { align-self: flex-start; min-height: 36px; padding: 0; borde
 #room-words-list .words { color: var(--muted); }
 .grow-1 { flex: 1; font-size: 0.8rem; font-weight: 500; }
 .set-card .row button.tall { height: auto; min-height: 40px; padding: 4px 8px; line-height: 1.25; }
+.ptt-desktop { display: flex; flex-direction: column; gap: 10px; }
+.ptt-key-row { display: flex; align-items: center; gap: 10px; }
+.ptt-key-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ptt-key-title { font-size: 0.875rem; font-weight: 600; }
+.ptt-key { font: inherit; font-size: 0.8rem; font-weight: 600; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); white-space: nowrap; }
+.ptt-key.recording { border-color: var(--accent); color: var(--accent); }
+.set-strong { font-weight: 600; }
 .set-done { margin: 0; font-size: 0.8rem; color: var(--accent); font-weight: 500; }
 #backup-slot:empty { display: none; }
 #backup-slot .backup-card { padding: 12px; border-radius: 10px; background: var(--bg); }
