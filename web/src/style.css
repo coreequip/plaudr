@@ -50,3 +50,5 @@ button.link { border: none; background: none; color: var(--muted); text-decorati
 #debug-table { border-collapse: collapse; font-size: 0.85rem; width: 100%; }
 #debug-table th, #debug-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .muted { color: var(--muted); margin: 0; font-size: 0.85rem; }
+.foot { margin-top: 32px; color: var(--muted); font-size: 0.8rem; }
+.foot a { color: inherit; }
