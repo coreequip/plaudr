@@ -1,6 +1,7 @@
 import workletUrl from './capture.worklet.ts?worker&url';
 import type { CaptureActivity, CaptureControl } from './messages';
 import { resumeWithin } from './resume';
+import { createSwapper } from './swap';
 import { RNNOISE_WASM_URL } from './rnnoise-url';
 import type { AudioSettings } from './settings';
 
@@ -125,6 +126,18 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
         for (const cb of fallbackCbs) cb();
       };
 
+      const swapper = createSwapper<MediaStream>({
+        open: () => openMic(!settings.denoise, settings.deviceId),
+        apply(next) {
+          source.disconnect();
+          micStream.getTracks().forEach((t) => t.stop());
+          micStream = next;
+          source = ctx.createMediaStreamSource(micStream);
+          source.connect(target());
+        },
+        discard: (next) => next.getTracks().forEach((t) => t.stop()),
+      });
+
       const capture = {
         stream: dest.stream,
         processed: true,
@@ -137,16 +150,12 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
           applyGain();
           if (!sourceChanged) return;
           // Rauschunterdrückung und Gerät lassen sich nur beim Öffnen setzen; nur die Quelle tauschen, der Track bleibt.
-          const next = await openMic(!settings.denoise, settings.deviceId);
-          if (!next) return;
-          source.disconnect();
-          micStream.getTracks().forEach((t) => t.stop());
-          micStream = next;
-          source = ctx.createMediaStreamSource(micStream);
-          source.connect(target());
+          await swapper.swap();
         },
         needsGesture: () => ctx.state !== 'running',
-        resume: () => ctx.resume(),
+        resume: async () => {
+          if (!swapper.isClosed()) await ctx.resume();
+        },
         setPressed(b: boolean) {
           pressed = b;
           node.port.postMessage({ pressed: b } satisfies CaptureControl);
@@ -156,6 +165,8 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
         onFallback: (cb: () => void) => void fallbackCbs.push(cb),
         activity: () => last,
         close() {
+          if (swapper.isClosed()) return;
+          swapper.close();
           micStream.getTracks().forEach((t) => t.stop());
           void ctx.close();
         },
