@@ -65,7 +65,12 @@ export class CaptureCore {
     const work = this.frame.slice();
     const original = this.denoise ? null : this.frame.slice();
     const vad = this.denoiser.process(work);
-    for (const f of this.gate.process(original ?? work, vad)) this.write(f);
+    for (const f of this.gate.process(original ?? work, vad)) {
+      // Geschlossenes Gate und Rückstand im Puffer (Vorlauf, der beim Sprechen nicht abgebaut wurde): die Stille
+      // einfach weglassen. So hängt die Latenz am Pufferstand, nicht am Zustand des Gates.
+      if (!this.gate.open && this.count >= FRAME_SIZE) continue;
+      this.write(f);
+    }
     this.report(vad);
   }
 

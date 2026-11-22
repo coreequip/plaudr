@@ -47,8 +47,10 @@ export function initControls(o: ControlsOptions): () => void {
   $<HTMLInputElement>('denoise').disabled = !capture;
   $<HTMLInputElement>('denoise').onchange = (e) => void o.setSettings({ denoise: (e.target as HTMLInputElement).checked });
 
+  const isPtt = () => o.settings().mode === 'ptt';
+  // Loslassen immer durchreichen, auch wenn der Modus inzwischen gewechselt hat.
   const setPressed = (p: boolean) => {
-    if (o.settings().mode === 'ptt') capture?.setPressed(p);
+    if (!p || isPtt()) capture?.setPressed(p);
   };
   const ptt = $<HTMLButtonElement>('ptt');
   ptt.onpointerdown = (e) => {
@@ -56,7 +58,7 @@ export function initControls(o: ControlsOptions): () => void {
     setPressed(true);
   };
   ptt.onpointerup = ptt.onpointercancel = () => setPressed(false);
-  const unbindKeys = bindPttKeys(window, setPressed, isTyping);
+  const unbindKeys = bindPttKeys(window, setPressed, isTyping, isPtt);
 
   const me = $('me-speaking');
   capture?.onActivity((a) => (me.hidden = !a.open));

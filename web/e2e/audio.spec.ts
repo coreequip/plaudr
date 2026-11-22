@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeContexts, connected, expectMesh, join, open, roomHash } from './helpers';
+import { closeContexts, connected, expectMesh, join, newContext, open, openIn, roomHash } from './helpers';
 
 test.afterEach(closeContexts);
 
@@ -128,4 +128,32 @@ test('Debug-Panel zeigt RTT und Verbindungsart je Teilnehmer', async ({ browser 
   await expect(a.locator('#debug-preroll')).toBeChecked();
   await a.locator('#debug-preroll').uncheck();
   expect(await a.evaluate(() => JSON.parse(localStorage.getItem('plaudr.audio')!).preroll)).toBe(false);
+});
+
+test('stürzt das Worklet ab, geht das Rohmikrofon raus, mit Hinweis, und Stumm wirkt weiter', async ({ browser }) => {
+  const h = roomHash('absturz');
+  const ctx = await newContext(browser);
+  // AudioWorkletNodes einsammeln, um einen Absturz im Audio-Thread nachzustellen.
+  await ctx.addInitScript(() => {
+    const Orig = window.AudioWorkletNode;
+    (window as any).__nodes = [];
+    window.AudioWorkletNode = class extends Orig {
+      constructor(...args: ConstructorParameters<typeof Orig>) {
+        super(...args);
+        (window as any).__nodes.push(this);
+      }
+    } as typeof Orig;
+  });
+  const a = await openIn(ctx, h);
+  const b = await open(browser, h);
+  await join(a, 'Anna');
+  await join(b, 'Bert');
+  await expectMesh([a, b], 1);
+  const aId = await selfId(a);
+  await a.evaluate(() => (window as any).__nodes[0].dispatchEvent(new Event('processorerror')));
+  await expect(a.locator('#notice')).toHaveText('Rauschunterdrückung und Sprachaktivierung sind ausgefallen, dein Mikrofon geht ungefiltert raus.');
+  expect(await maxLevel(b, aId, 4000)).toBeGreaterThan(0.01);
+  await a.click('#mode-muted');
+  await b.waitForTimeout(700);
+  expect(await maxLevel(b, aId, 2000)).toBeLessThan(0.005);
 });

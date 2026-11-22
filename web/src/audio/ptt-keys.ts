@@ -7,7 +7,13 @@ type KeyLike = Event & { code?: string; repeat?: boolean };
  * Tippen in Eingabefeldern zählen nicht. Verliert der Tab den Fokus oder wird unsichtbar, gilt die Taste als losgelassen,
  * weil das keyup sonst nie ankommt. Liefert eine Funktion zum Abmelden.
  */
-export function bindPttKeys(target: EventTarget, onChange: (pressed: boolean) => void, isTyping: (e: Event) => boolean): () => void {
+export function bindPttKeys(
+  target: EventTarget,
+  onChange: (pressed: boolean) => void,
+  isTyping: (e: Event) => boolean,
+  /** Nur im PTT-Modus wird die Leertaste abgefangen; sonst bedient sie wie gewohnt Knöpfe. */
+  isActive: () => boolean = () => true,
+): () => void {
   let pressed = false;
   const set = (p: boolean) => {
     if (p === pressed) return;
@@ -15,7 +21,7 @@ export function bindPttKeys(target: EventTarget, onChange: (pressed: boolean) =>
     onChange(p);
   };
   const down = (e: KeyLike) => {
-    if (e.code !== PTT_CODE || isTyping(e)) return;
+    if (e.code !== PTT_CODE || isTyping(e) || !isActive()) return;
     e.preventDefault();
     if (!e.repeat) set(true);
   };

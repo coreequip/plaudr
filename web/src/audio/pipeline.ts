@@ -8,6 +8,8 @@ export interface Capture {
   readonly stream: MediaStream;
   /** false: Worklet oder WASM nicht nutzbar, es geht das Rohmikrofon raus. */
   readonly processed: boolean;
+  /** Das Worklet ist im Gespräch ausgefallen; ab jetzt geht das Rohmikrofon raus (gleicher Track). */
+  onFallback(cb: () => void): void;
   update(s: Partial<AudioSettings>): Promise<void>;
   setPressed(b: boolean): void;
   onActivity(cb: (a: CaptureActivity) => void): void;
@@ -80,19 +82,46 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
       await ctx.resume();
 
       let last: CaptureActivity = { open: false, vad: 0 };
+      let pressed = false;
       const cbs: ((a: CaptureActivity) => void)[] = [];
-      node.port.onmessage = (e: MessageEvent<CaptureActivity>) => {
-        last = e.data;
-        for (const cb of cbs) cb(last);
+      const fallbackCbs: (() => void)[] = [];
+      const emit = (a: CaptureActivity) => {
+        last = a;
+        for (const cb of cbs) cb(a);
+      };
+      node.port.onmessage = (e: MessageEvent<CaptureActivity>) => emit(e.data);
+
+      // Fällt das Worklet aus (Fehler im Konstruktor oder in process()), gibt es nur noch Stille. Dann das Mikrofon
+      // über einen Gain-Knoten direkt auf dasselbe Ziel legen: Stumm und PTT wirken weiter, VAD wirkt wie offen.
+      let gain: GainNode | null = null;
+      const target = (): AudioNode => gain ?? node;
+      const applyGain = () => {
+        if (!gain) return;
+        const open = settings.mode === 'vad' || (settings.mode === 'ptt' && pressed);
+        gain.gain.value = open ? 1 : 0;
+        emit({ open, vad: 0 });
+      };
+      node.onprocessorerror = () => {
+        if (gain) return;
+        console.warn('[plaudr] Audio-Worklet ausgefallen, sende Rohmikrofon');
+        gain = ctx.createGain();
+        gain.connect(dest);
+        source.disconnect();
+        node.disconnect();
+        source.connect(gain);
+        capture.processed = false;
+        applyGain();
+        for (const cb of fallbackCbs) cb();
       };
 
-      return {
+      const capture = {
         stream: dest.stream,
         processed: true,
-        async update(p) {
+        async update(p: Partial<AudioSettings>) {
           const denoiseChanged = p.denoise !== undefined && p.denoise !== settings.denoise;
           settings = { ...settings, ...p };
           node.port.postMessage(toControl(p));
+          applyGain();
           if (!denoiseChanged) return;
           // Browser-Rauschunterdrückung lässt sich nur beim Öffnen setzen; nur die Quelle tauschen, der Track bleibt.
           const next = await openMic(!settings.denoise);
@@ -101,16 +130,22 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
           micStream.getTracks().forEach((t) => t.stop());
           micStream = next;
           source = ctx.createMediaStreamSource(micStream);
-          source.connect(node);
+          source.connect(target());
         },
-        setPressed: (b) => node.port.postMessage({ pressed: b } satisfies CaptureControl),
-        onActivity: (cb) => void cbs.push(cb),
+        setPressed(b: boolean) {
+          pressed = b;
+          node.port.postMessage({ pressed: b } satisfies CaptureControl);
+          applyGain();
+        },
+        onActivity: (cb: (a: CaptureActivity) => void) => void cbs.push(cb),
+        onFallback: (cb: () => void) => void fallbackCbs.push(cb),
         activity: () => last,
         close() {
           micStream.getTracks().forEach((t) => t.stop());
           void ctx.close();
         },
       };
+      return capture;
     } catch (err) {
       void ctx.close();
       throw err;
@@ -140,6 +175,7 @@ function rawCapture(mic: MediaStream, initial: AudioSettings): Capture {
       apply();
     },
     onActivity: (cb) => void cbs.push(cb),
+    onFallback: () => {},
     activity: () => ({ open: track.enabled, vad: 0 }),
     close: () => mic.getTracks().forEach((t) => t.stop()),
   };

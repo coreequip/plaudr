@@ -108,3 +108,37 @@ test('mit echtem RNNoise und der Sprachprobe öffnet und schließt das Gate', ()
   expect(firstOpen).toBeGreaterThanOrEqual(0);
   expect(opens.indexOf(false, firstOpen)).toBeGreaterThan(firstOpen);
 });
+
+test('Rückstand aus dem Vorlauf wird abgebaut, auch wenn die Pausen nicht sauber sind', () => {
+  // Jeder Sprechansatz holt 200 ms Vorlauf; dazwischen VAD 0,6 (über halber Schwelle, unter Schwelle): Das Gate baut
+  // den Rückstand dann nicht selbst ab und schließt nach 400 ms. Danach muss der Puffer wieder klein sein.
+  const pattern = [...Array(20).fill(0.1), 0.95, ...Array(45).fill(0.6)];
+  const vads = Array.from({ length: 5 }, () => pattern).flat();
+  const c = new CaptureCore(fakeDenoiser(vads), new Gate());
+  const out = new Float32Array(128);
+  let maxAfterClose = 0;
+  for (let q = 0; q < (vads.length * FRAME_SIZE) / 128; q++) {
+    c.push(new Float32Array(128).fill(0.5));
+    c.pull(out);
+    const total = Math.floor((q * 128) / FRAME_SIZE);
+    const frame = total % pattern.length;
+    // Kurz vor dem nächsten Ansatz (ab der zweiten Runde): 25 Frames nach dem Schließen, Abbau 1 Frame je Frame.
+    if (total >= pattern.length && frame >= 17 && frame < 20) maxAfterClose = Math.max(maxAfterClose, c.bufferedSamples);
+  }
+  expect(maxAfterClose).toBeLessThan(FRAME_SIZE * 2);
+});
+
+test('Moduswechsel kurz nach dem Sprechansatz lässt keinen Rückstand liegen', () => {
+  const c = new CaptureCore(fakeDenoiser([...Array(20).fill(0.1), 0.95, 0.95]), new Gate());
+  const out = new Float32Array(128);
+  for (let q = 0; q < (22 * FRAME_SIZE) / 128; q++) {
+    c.push(new Float32Array(128).fill(0.5));
+    c.pull(out);
+  }
+  c.control({ mode: 'muted' });
+  for (let q = 0; q < (30 * FRAME_SIZE) / 128; q++) {
+    c.push(new Float32Array(128).fill(0.5));
+    c.pull(out);
+  }
+  expect(c.bufferedSamples).toBeLessThan(FRAME_SIZE * 2);
+});

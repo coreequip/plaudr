@@ -41,6 +41,8 @@ export class Gate {
     this._mode = m;
     this.close();
     this.tailLeft = 0;
+    // Sonst bliebe eine beim Wechsel gehaltene Taste „gedrückt“, wenn ihr Loslassen nicht mehr durchgereicht wird.
+    this.pressed = false;
   }
 
   get open(): boolean {

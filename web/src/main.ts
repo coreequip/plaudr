@@ -134,6 +134,7 @@ async function join(secret: string): Promise<void> {
   if (!me.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
   if (!capture) view.notice('Kein Mikrofon: du hörst nur zu.');
   else if (!capture.processed) view.notice('Rauschunterdrückung und Sprachaktivierung sind in diesem Browser nicht verfügbar.');
+  capture?.onFallback(() => view.notice('Rauschunterdrückung und Sprachaktivierung sind ausgefallen, dein Mikrofon geht ungefiltert raus.'));
   const localStream = capture?.stream ?? null;
   const setSettings = async (p: Partial<AudioSettings>) => {
     settings = { ...settings, ...p };

@@ -157,3 +157,12 @@ test('ausgegebene Frames sind Kopien', () => {
   f.fill(0);
   expect(id(out)).toBe(7);
 });
+
+test('Moduswechsel setzt eine gedrückte PTT-Taste zurück', () => {
+  const g = new Gate();
+  g.mode = 'ptt';
+  g.setPressed(true);
+  g.mode = 'vad';
+  g.mode = 'ptt';
+  expect(voiced(run(g, Array(20).fill(0)))).toBe(0);
+});

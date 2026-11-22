@@ -4,6 +4,7 @@ import { bindPttKeys } from './ptt-keys';
 let target: EventTarget;
 let changes: boolean[];
 let typing: boolean;
+let active: boolean;
 let unbind: () => void;
 
 const key = (type: 'keydown' | 'keyup', code = 'Space', repeat = false) => {
@@ -16,7 +17,8 @@ beforeEach(() => {
   target = new EventTarget();
   changes = [];
   typing = false;
-  unbind = bindPttKeys(target, (p) => changes.push(p), () => typing);
+  active = true;
+  unbind = bindPttKeys(target, (p) => changes.push(p), () => typing, () => active);
 });
 
 test('Drücken und Loslassen der Leertaste', () => {
@@ -73,4 +75,19 @@ test('Abmelden entfernt alle Listener', () => {
   unbind();
   key('keydown');
   expect(changes).toEqual([]);
+});
+
+test('außerhalb des PTT-Modus bleibt die Leertaste frei (kein preventDefault, keine Meldung)', () => {
+  active = false;
+  const e = key('keydown');
+  key('keyup');
+  expect(changes).toEqual([]);
+  expect(e.defaultPrevented).toBe(false);
+});
+
+test('Loslassen kommt auch an, wenn der PTT-Modus inzwischen verlassen wurde', () => {
+  key('keydown');
+  active = false;
+  key('keyup');
+  expect(changes).toEqual([true, false]);
 });
