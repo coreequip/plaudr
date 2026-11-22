@@ -32,6 +32,8 @@ class FakeLink implements PeerLinkLike {
   get peerId() { return this.opts.peerId; }
   async handle(p: Payload) { this.handled.push(p); }
   async getStats() { return new Map() as unknown as RTCStatsReport; }
+  audioLevel() { return 0; }
+  senderTrackId() { return null; }
   close() { this.closed = true; }
 }
 

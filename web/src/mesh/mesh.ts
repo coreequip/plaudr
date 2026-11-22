@@ -75,6 +75,18 @@ export class Mesh {
     return out;
   }
 
+  audioLevels(): Record<string, number> {
+    return Object.fromEntries([...this.links].map(([id, l]) => [id, l.audioLevel()]));
+  }
+
+  senderTrackId(): string | null {
+    for (const l of this.links.values()) {
+      const id = l.senderTrackId();
+      if (id) return id;
+    }
+    return null;
+  }
+
   async leave(): Promise<void> {
     this.o.signaling.send('bye', '*', {});
     for (const id of [...this.links.keys()]) this.remove(id);

@@ -2,6 +2,9 @@ import './style.css';
 import RoomWS from 'roomws';
 import { ROOMWS_CHANNEL, ROOMWS_URL, TURN_URL } from './config';
 import { fetchIceServers } from './ice-servers';
+import { openCapture } from './audio/pipeline';
+import type { CaptureActivity } from './audio/messages';
+import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { Mesh, type PeerView } from './mesh/mesh';
 import { loadOrCreateIdentity, type Identity } from './crypto/identity';
 import { idbIdentityStore } from './crypto/identity-store';
@@ -21,6 +24,11 @@ declare global {
       bytesReceived(): Promise<Record<string, number>>;
       signalingStats(): SignalingStats;
       dropSignaling(): void;
+      audioLevels(): Record<string, number>;
+      activity(): CaptureActivity;
+      senderTrackId(): string | null;
+      setSettings(s: Partial<AudioSettings>): Promise<void>;
+      setPressed(b: boolean): void;
     };
   }
 }
@@ -61,15 +69,6 @@ function onHello(peerId: string, name: string): void {
     localStorage.setItem(CONTACTS_KEY, JSON.stringify(r.contacts));
   } catch {
     /* privater Modus: Kontakte werden nicht gemerkt */
-  }
-}
-
-async function openMicrophone(): Promise<MediaStream | null> {
-  try {
-    return await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch {
-    view.notice('Kein Mikrofon: du hörst nur zu.');
-    return null;
   }
 }
 
@@ -123,12 +122,21 @@ async function join(secret: string): Promise<void> {
   saveName(name);
   $<HTMLButtonElement>('join').disabled = true;
 
-  const [localStream, iceServers, { roomId, roomKey }] = await Promise.all([
-    openMicrophone(),
+  let settings = loadAudioSettings();
+  const [capture, iceServers, { roomId, roomKey }] = await Promise.all([
+    openCapture(settings),
     fetchIceServers(TURN_URL),
     deriveRoom(secret),
   ]);
   if (!me.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
+  if (!capture) view.notice('Kein Mikrofon: du hörst nur zu.');
+  else if (!capture.processed) view.notice('Rauschunterdrückung und Sprachaktivierung sind in diesem Browser nicht verfügbar.');
+  const localStream = capture?.stream ?? null;
+  const setSettings = async (p: Partial<AudioSettings>) => {
+    settings = { ...settings, ...p };
+    saveAudioSettings(settings);
+    await capture?.update(p);
+  };
   const drone = new RoomWS(ROOMWS_CHANNEL, { url: ROOMWS_URL });
   const selfId = me.peerId;
   const signaling = new Signaling({ drone, roomId, roomKey, identity: me });
@@ -145,16 +153,22 @@ async function join(secret: string): Promise<void> {
   view.renderPeers([]);
   view.show('call');
 
+  // Vorläufig: Stumm ein und aus; die Bedienelemente für alle Modi kommen mit der UI.
   const mute = $<HTMLButtonElement>('mute');
-  mute.disabled = !localStream;
-  mute.onclick = () => {
-    const track = localStream?.getAudioTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    mute.textContent = track.enabled ? 'Stumm' : 'Mikro an';
+  mute.disabled = !capture;
+  let before: AudioSettings['mode'] = settings.mode === 'muted' ? 'vad' : settings.mode;
+  const renderMute = () => (mute.textContent = settings.mode === 'muted' ? 'Mikro an' : 'Stumm');
+  renderMute();
+  mute.onclick = async () => {
+    if (settings.mode === 'muted') await setSettings({ mode: before });
+    else {
+      before = settings.mode;
+      await setSettings({ mode: 'muted' });
+    }
+    renderMute();
   };
   $('leave').onclick = async () => {
-    localStream?.getTracks().forEach((t) => t.stop());
+    capture?.close();
     await mesh.leave();
     location.reload();
   };
@@ -167,6 +181,11 @@ async function join(secret: string): Promise<void> {
     signalingStats: () => signaling.stats(),
     bytesReceived: () => mesh.bytesReceived(),
     dropSignaling: () => drone.socket.close(),
+    audioLevels: () => mesh.audioLevels(),
+    activity: () => capture?.activity() ?? { open: false, vad: 0 },
+    senderTrackId: () => mesh.senderTrackId(),
+    setSettings,
+    setPressed: (b) => capture?.setPressed(b),
   };
 }
 

@@ -18,10 +18,14 @@ export interface PeerLinkLike {
   readonly state: RTCPeerConnectionState;
   handle(p: Payload): Promise<void>;
   getStats(): Promise<RTCStatsReport>;
+  /** Pegel 0..1 des zuletzt empfangenen Audiopakets; 0, wenn älter als 500 ms. */
+  audioLevel(): number;
+  senderTrackId(): string | null;
   close(): void;
 }
 
 const MAX_ICE_RESTARTS = 3;
+const LEVEL_STALE_MS = 500;
 /** So lange darf ein ICE-Neustart dauern, bevor er als gescheitert zählt (z. B. Gegenüber antwortet nie). */
 const ICE_RESTART_TIMEOUT_MS = 10_000;
 
@@ -94,6 +98,17 @@ export class PeerLink implements PeerLinkLike {
 
   getStats(): Promise<RTCStatsReport> {
     return this.pc.getStats();
+  }
+
+  audioLevel(): number {
+    const receiver = this.pc.getReceivers().find((r) => r.track.kind === 'audio');
+    const src = receiver?.getSynchronizationSources()[0];
+    if (!src || performance.now() - src.timestamp > LEVEL_STALE_MS) return 0;
+    return src.audioLevel ?? 0;
+  }
+
+  senderTrackId(): string | null {
+    return this.pc.getSenders().find((s) => s.track?.kind === 'audio')?.track?.id ?? null;
   }
 
   close(): void {

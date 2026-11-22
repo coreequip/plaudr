@@ -1,4 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+
+/** Echte (synthetische) Sprache mit Pausen als Fake-Mikrofon, damit Sprachaktivierung und RNNoise etwas zu tun haben. */
+const SPEECH = fileURLToPath(new URL('./e2e/fixtures/speech.wav', import.meta.url));
 
 const ROOMWS_PORT = 18080;
 const WEB_PORT = 5174;
@@ -12,7 +16,12 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${WEB_PORT}`,
     ...devices['Desktop Chrome'],
-    launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'] },
+    launchOptions: { args: [
+        '--use-fake-device-for-media-stream',
+        '--use-fake-ui-for-media-stream',
+        '--autoplay-policy=no-user-gesture-required',
+        `--use-file-for-fake-audio-capture=${SPEECH}`,
+      ] },
     permissions: ['microphone'],
   },
   webServer: [
