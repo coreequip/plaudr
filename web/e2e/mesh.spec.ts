@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { bytes, closeContexts, connected, expectAudioFlowing, expectMesh, join, open, peerCount, roomHash } from './helpers';
+import { backup, bytes, closeContexts, connected, expectAudioFlowing, expectMesh, join, open, peerCount, roomHash } from './helpers';
 
 test.afterEach(closeContexts);
 
@@ -18,7 +18,10 @@ test('drei Teilnehmer hören sich', async ({ browser }) => {
 test('gleichzeitiger Beitritt', async ({ browser }) => {
   const h = roomHash('gleichzeitig');
   const pages = await Promise.all([open(browser, h), open(browser, h), open(browser, h)]);
-  for (const [i, p] of pages.entries()) await p.fill('#name', `G${i}`);
+  for (const [i, p] of pages.entries()) {
+    await backup(p);
+    await p.fill('#name', `G${i}`);
+  }
   await Promise.all(pages.map((p) => p.click('#join')));
   await expectMesh(pages, 2);
   await expect.poll(() => bytes(pages[2]).then((b) => Math.min(...Object.values(b)))).toBeGreaterThan(0);

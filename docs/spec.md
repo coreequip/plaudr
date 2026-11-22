@@ -60,16 +60,24 @@ sichtbare Teilnehmerliste, lokales Blockieren (Abschnitt 5) und Raum neu erzeuge
 
 ## 4. Identität
 
-- Beim ersten Start: Ed25519-Schlüsselpaar über WebCrypto, privater Schlüssel
-  **nicht exportierbar**, abgelegt in IndexedDB; dazu `navigator.storage.persist()`.
+- Beim ersten Start: Ed25519-Schlüsselpaar über WebCrypto, abgelegt in IndexedDB;
+  dazu `navigator.storage.persist()`. Der private Schlüssel ist exportierbar, damit er
+  gesichert werden kann (Abwägung: Schadcode auf der Seite könnte ihn abgreifen, könnte
+  aber ohnehin in deinem Namen signieren, solange er läuft).
 - `peerId = base32(SHA-256(publicKeyRaw))[0..26]`, Anzeige zusätzlich als 4 Wörter
   aus einer Wortliste (für Vergleich am Telefon, optional).
-- Anzeigename wählt der Nutzer frei; er reist im `hello` mit.
+- Anzeigename wählt der Nutzer frei und muss ihn angeben (kein Standardname); er reist im `hello` mit.
 - Lokale Kontaktliste pro Client: `peerId → zuletzt gesehener Name, erstmals gesehen`.
   Taucht ein bekannter Name mit **anderer** peerId auf, zeigt die UI einen Hinweis
   („Anna hat einen neuen Schlüssel“): typischer Fall Browserdaten gelöscht.
-- Kein Backup des Schlüssels im MVP. Verlust = neue Identität, man wird über den Link
-  wieder Mitglied.
+- **Sicherung ist Pflicht:** Nach dem Anlegen kann man erst beitreten, wenn der Schlüssel
+  gesichert ist. Sicherungsdatei `plaudr-<Name>.plaudr-key` (JSON: `format`, `v`, `pub`,
+  `kdf` = PBKDF2-SHA-256 mit 600 000 Runden und 16 Byte Salt, `iv`, `ct` = AES-256-GCM
+  über den PKCS#8-Schlüssel, `pub` als Zusatzdaten gebunden), Passwort mindestens 8 Zeichen.
+  Später jederzeit erneut sicherbar. Über „Sicherung laden“ nimmt man die Identität in die
+  App oder einen anderen Browser mit. Ohne nutzbaren Speicher (flüchtige Identität) entfällt
+  die Pflicht.
+- Verlust von Datei oder Passwort = neue Identität, man wird über den Link wieder Mitglied.
 
 Was die Identität bei „Link reicht“ leistet: room_ws kann ohne `roomKey` weder lesen
 noch einschleusen. Die Signaturen schützen gegen **andere Linkinhaber**, die die
@@ -212,6 +220,7 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
   - Link-Übernahme: `plaudr://`-Deep-Link (`tauri-plugin-deep-link`) und Einfügen eines
     `https://plaudr.room.ws/#…`-Links
   - optional Autostart
+  - Sicherungsdatei über den nativen Speichern- und Öffnen-Dialog statt Browser-Download
 - Origin: Windows `http://tauri.localhost` → in `ROOMWS_ALLOWED_ORIGINS` aufnehmen;
   macOS `tauri://localhost` ist über `localhost` bereits erlaubt.
 - macOS: `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`; signiert mit

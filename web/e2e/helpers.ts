@@ -38,7 +38,25 @@ export async function openIn(ctx: BrowserContext, hash: string, opts: { noMic?: 
   return page;
 }
 
+export const BACKUP_PW = 'geheim-123';
+
+/** Sichert den Schlüssel über die Oberfläche und liefert den Inhalt der heruntergeladenen Datei. */
+export async function backup(page: Page, pw = BACKUP_PW): Promise<string> {
+  await page.fill('#backup-pw', pw);
+  await page.fill('#backup-pw2', pw);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#backup-save')]);
+  await expect(page.locator('#backup')).toBeHidden();
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const c of stream) chunks.push(c as Buffer);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/** Tritt bei; sichert vorher den Schlüssel, falls die Lobby das verlangt. */
 export async function join(page: Page, name: string): Promise<void> {
+  await expect(page.locator('#join')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.body.dataset.identity)).toBe('ready');
+  if (await page.locator('#backup').isVisible()) await backup(page);
   await page.fill('#name', name);
   await page.click('#join');
   await expect(page.locator('#call')).toBeVisible();

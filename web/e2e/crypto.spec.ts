@@ -75,11 +75,10 @@ test('zweiter Tab im selben Browser tritt nicht bei', async ({ browser }) => {
   const first = await openIn(ctx, h);
   await join(first, 'Anna');
   const second = await openIn(ctx, h);
-  await second.fill('#name', 'Anna');
-  await second.click('#join');
   await expect(second.locator('#lobby-notice')).toHaveText('plaudr ist in diesem Browser schon in einem anderen Tab offen.');
+  await second.fill('#name', 'Anna');
+  await expect(second.locator('#join')).toBeDisabled();
   await expect(second.locator('#call')).toBeHidden();
-  await expect(second.locator('#join')).toBeEnabled();
 });
 
 test('Neuladen ohne bye (wie ein Absturz): beide finden sofort wieder zusammen', async ({ browser }) => {

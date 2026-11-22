@@ -6,12 +6,18 @@ export interface Identity {
   readonly pub: string;
   /** false, wenn die Identität nicht gespeichert werden konnte und mit dem Tab verschwindet. */
   readonly persistent: boolean;
+  /** true, sobald eine Sicherungsdatei erstellt oder diese Identität aus einer geladen wurde. */
+  readonly backedUp: boolean;
+  /** Rohdaten für Sicherung und Speicher. */
+  readonly stored: StoredIdentity;
   sign(data: string): Promise<string>;
 }
 
 export interface StoredIdentity {
+  /** Exportierbar, damit die Identität gesichert und in App oder anderen Browser mitgenommen werden kann. */
   privateKey: CryptoKey;
   pub: string;
+  backedUp?: boolean;
 }
 
 export interface IdentityStore {
@@ -50,6 +56,11 @@ export async function loadOrCreateIdentity(store: IdentityStore): Promise<Identi
     console.warn('[plaudr] Identität nicht ladbar', err);
     persistent = false;
   }
+  if (stored && !stored.privateKey.extractable) {
+    // Stand M2: nicht exportierbar und damit nicht sicherbar; ersetzen, solange es noch keine Nutzer gibt.
+    console.warn('[plaudr] alte Identität ohne Sicherungsmöglichkeit wird ersetzt');
+    stored = undefined;
+  }
   if (!stored) {
     stored = await createKeys();
     if (persistent) {
@@ -61,11 +72,17 @@ export async function loadOrCreateIdentity(store: IdentityStore): Promise<Identi
       }
     }
   }
+  return identityFrom(stored, persistent);
+}
+
+export async function identityFrom(stored: StoredIdentity, persistent: boolean): Promise<Identity> {
   const { privateKey, pub } = stored;
   return {
     peerId: await peerIdFor(fromBase64url(pub)),
     pub,
     persistent,
+    backedUp: stored.backedUp === true,
+    stored,
     sign: async (data) => toBase64url(new Uint8Array(await crypto.subtle.sign('Ed25519', privateKey, enc.encode(data)))),
   };
 }
@@ -81,7 +98,7 @@ export async function verifySignature(pub: string, sig: string, data: string): P
 }
 
 async function createKeys(): Promise<StoredIdentity> {
-  const pair = (await crypto.subtle.generateKey('Ed25519', false, ['sign', 'verify'])) as CryptoKeyPair;
+  const pair = (await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify'])) as CryptoKeyPair;
   const raw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
   return { privateKey: pair.privateKey, pub: toBase64url(raw) };
 }

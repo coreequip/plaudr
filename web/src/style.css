@@ -28,3 +28,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 #peers li { display: flex; justify-content: space-between; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
 #peers .state { color: var(--muted); font-size: 0.85rem; }
 #alone, #notice { color: var(--muted); margin: 0; }
+.card { display: grid; gap: 8px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+.card p { margin: 0; }
+details { display: grid; gap: 8px; }
+details[open] { display: grid; }
+details > :not(summary) { margin-top: 8px; display: block; width: 100%; }
+summary { cursor: pointer; color: var(--muted); }
+button.link { border: none; background: none; color: var(--muted); text-decoration: underline; padding: 0; justify-self: start; }

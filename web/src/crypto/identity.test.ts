@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { fromBase64url } from '../util/base64url';
+import { fromBase64url, toBase64url } from '../util/base64url';
 import { loadOrCreateIdentity, peerIdFor, verifySignature, type IdentityStore, type StoredIdentity } from './identity';
 
 function memoryStore(): IdentityStore & { v?: StoredIdentity; saves: number } {
@@ -32,10 +32,28 @@ test('neue Identität wird gespeichert und beim nächsten Laden wiederverwendet'
   expect(b.persistent).toBe(true);
 });
 
-test('privater Schlüssel ist nicht exportierbar', async () => {
+test('privater Schlüssel ist exportierbar, damit er gesichert werden kann', async () => {
   const store = memoryStore();
   await loadOrCreateIdentity(store);
-  expect(store.v!.privateKey.extractable).toBe(false);
+  expect(store.v!.privateKey.extractable).toBe(true);
+});
+
+test('neue Identität gilt als noch nicht gesichert, eine gesicherte bleibt gesichert', async () => {
+  const store = memoryStore();
+  expect((await loadOrCreateIdentity(store)).backedUp).toBe(false);
+  store.v = { ...store.v!, backedUp: true };
+  expect((await loadOrCreateIdentity(store)).backedUp).toBe(true);
+});
+
+test('alte, nicht exportierbare Identität wird durch eine neue ersetzt', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const store = memoryStore();
+  const pair = (await crypto.subtle.generateKey('Ed25519', false, ['sign', 'verify'])) as CryptoKeyPair;
+  const pub = toBase64url(new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey)));
+  store.v = { privateKey: pair.privateKey, pub };
+  const id = await loadOrCreateIdentity(store);
+  expect(id.pub).not.toBe(pub);
+  expect(store.v.privateKey.extractable).toBe(true);
 });
 
 test('peerId passt zum pub', async () => {

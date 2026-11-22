@@ -16,8 +16,25 @@
 
       <section id="lobby" hidden>
         <label for="name">Dein Name</label>
-        <input id="name" maxlength="40" autocomplete="nickname" />
-        <button id="join" class="primary">Beitreten</button>
+        <input id="name" maxlength="40" autocomplete="nickname" required />
+        <div id="backup" class="card" hidden>
+          <p>Sichere deinen Schlüssel. Mit der Sicherungsdatei nimmst du deine Identität in die App oder einen anderen Browser mit.</p>
+          <label for="backup-pw">Passwort für die Sicherung</label>
+          <input id="backup-pw" type="password" autocomplete="new-password" />
+          <label for="backup-pw2">Passwort wiederholen</label>
+          <input id="backup-pw2" type="password" autocomplete="new-password" />
+          <button id="backup-save">Sicherung herunterladen</button>
+          <details id="restore">
+            <summary>Schon eine Sicherung? Hier laden</summary>
+            <input id="restore-file" type="file" accept=".plaudr-key,application/json" aria-label="Sicherungsdatei" />
+            <label for="restore-pw">Passwort der Sicherung</label>
+            <input id="restore-pw" type="password" autocomplete="current-password" />
+            <button id="restore-load">Sicherung laden</button>
+          </details>
+          <p id="backup-error" class="warn" hidden></p>
+        </div>
+        <button id="join" class="primary" disabled>Beitreten</button>
+        <button id="backup-again" class="link" hidden>Schlüssel sichern oder Sicherung laden</button>
         <p id="lobby-notice" class="warn" hidden></p>
       </section>
 

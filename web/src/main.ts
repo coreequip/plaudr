@@ -3,13 +3,14 @@ import RoomWS from 'roomws';
 import { ROOMWS_CHANNEL, ROOMWS_URL, TURN_URL } from './config';
 import { fetchIceServers } from './ice-servers';
 import { Mesh, type PeerView } from './mesh/mesh';
-import { loadOrCreateIdentity } from './crypto/identity';
+import { loadOrCreateIdentity, type Identity } from './crypto/identity';
 import { idbIdentityStore } from './crypto/identity-store';
 import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
+import { initBackupPanel, showBackupState } from './ui/backup-panel';
 import * as view from './ui/view';
 
 declare global {
@@ -27,6 +28,9 @@ declare global {
 const NAME_KEY = 'plaudr.name';
 const CONTACTS_KEY = 'plaudr.contacts';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const store = idbIdentityStore();
+let identity: Identity | null = null;
+let tabLocked = false;
 
 function loadName(): string {
   try {
@@ -69,33 +73,67 @@ async function openMicrophone(): Promise<MediaStream | null> {
   }
 }
 
+const nameValue = () => $<HTMLInputElement>('name').value.trim();
+
+/** Beitreten erst mit Namen, eigener Tab-Sperre und gesicherter (oder bewusst flüchtiger) Identität. */
+function updateJoinButton(): void {
+  const ok = tabLocked && identity !== null && (identity.backedUp || !identity.persistent) && nameValue() !== '';
+  $<HTMLButtonElement>('join').disabled = !ok;
+}
+
+/** Einmal je Seitenaufruf: Tab sperren, Identität laden, Sicherung anbieten oder verlangen. */
+let lobbyReady: Promise<void> | null = null;
+function prepareLobby(): Promise<void> {
+  lobbyReady ??= (async () => {
+    // Zwei Tabs teilen sich die Identität und damit die peerId; das Mesh kann das nicht auseinanderhalten.
+    // Die Sperre kommt vor dem Laden, damit beim ersten Start nicht zwei Tabs je einen Schlüssel anlegen.
+    tabLocked = await acquireTabLock();
+    if (!tabLocked) {
+      const n = $('lobby-notice');
+      n.textContent = 'plaudr ist in diesem Browser schon in einem anderen Tab offen.';
+      n.hidden = false;
+      return;
+    }
+    identity = await loadOrCreateIdentity(store);
+    if (!identity.persistent) {
+      const n = $('lobby-notice');
+      n.textContent = 'Deine Identität wird in diesem Browser nicht gespeichert.';
+      n.hidden = false;
+    }
+    initBackupPanel({
+      store,
+      identity: () => identity!,
+      setIdentity: (id) => {
+        identity = id;
+        updateJoinButton();
+      },
+      name: nameValue,
+    });
+    showBackupState(identity);
+    updateJoinButton();
+    document.body.dataset.identity = 'ready';
+  })();
+  return lobbyReady;
+}
+
 async function join(secret: string): Promise<void> {
-  const name = $<HTMLInputElement>('name').value.trim() || 'Gast';
+  const name = nameValue();
+  const me = identity;
+  if (!name || !me) return;
   saveName(name);
-  const joinButton = $<HTMLButtonElement>('join');
-  joinButton.disabled = true;
+  $<HTMLButtonElement>('join').disabled = true;
 
-  // Zwei Tabs teilen sich die Identität und damit die peerId; das Mesh kann das nicht auseinanderhalten.
-  if (!(await acquireTabLock())) {
-    const n = $('lobby-notice');
-    n.textContent = 'plaudr ist in diesem Browser schon in einem anderen Tab offen.';
-    n.hidden = false;
-    joinButton.disabled = false;
-    return;
-  }
-
-  const [localStream, iceServers, { roomId, roomKey }, identity] = await Promise.all([
+  const [localStream, iceServers, { roomId, roomKey }] = await Promise.all([
     openMicrophone(),
     fetchIceServers(TURN_URL),
     deriveRoom(secret),
-    loadOrCreateIdentity(idbIdentityStore()),
   ]);
-  if (!identity.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
+  if (!me.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
   const drone = new RoomWS(ROOMWS_CHANNEL, { url: ROOMWS_URL });
-  const selfId = identity.peerId;
-  const signaling = new Signaling({ drone, roomId, roomKey, identity });
+  const selfId = me.peerId;
+  const signaling = new Signaling({ drone, roomId, roomKey, identity: me });
   const mesh = new Mesh({
-    signaling, selfId, selfPub: identity.pub, name, localStream, iceServers,
+    signaling, selfId, selfPub: me.pub, name, localStream, iceServers,
     onTrack: view.attachAudio,
     onPeerGone: view.detachAudio,
     onChange: view.renderPeers,
@@ -143,8 +181,10 @@ function boot(): void {
     const secret = secretFromHash(location.hash);
     if (!secret) return view.show('start');
     $<HTMLInputElement>('name').value = loadName();
+    $('name').oninput = updateJoinButton;
     $('join').onclick = () => void join(secret);
     view.show('lobby');
+    void prepareLobby();
   };
   addEventListener('hashchange', route);
   route();
