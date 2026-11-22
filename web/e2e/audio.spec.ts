@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeContexts, connected, expectMesh, join, newContext, open, openIn, roomHash } from './helpers';
+import { closeContexts, connected, expectDirectCall, expectMesh, join, newContext, open, openIn, roomHash } from './helpers';
 
 test.afterEach(closeContexts);
 
@@ -103,7 +103,7 @@ test.describe('Bedienung', () => {
     await a.click('#mode-muted');
     await expect(a.locator('#mode-muted')).toHaveAttribute('aria-pressed', 'true');
     await a.reload();
-    await join(a, 'Anna');
+    await expectDirectCall(a);
     await expect(a.locator('#mode-muted')).toHaveAttribute('aria-pressed', 'true');
   });
 

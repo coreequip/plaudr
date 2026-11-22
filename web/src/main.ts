@@ -11,11 +11,13 @@ import { idbIdentityStore } from './crypto/identity-store';
 import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { autoJoinTarget } from './room/auto-join';
-import { loadRooms, noteJoin, saveRooms } from './room/rooms';
+import { canJoin } from './room/join-rule';
+import { loadRooms, noteJoin, notePeers, saveRooms } from './room/rooms';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
 import { initBackupPanel, showBackupState } from './ui/backup-panel';
+import { initCallHeader } from './ui/call-view';
 import { initControls } from './ui/controls';
 import { initDebug } from './ui/debug';
 import { loadPrefs } from './ui/prefs';
@@ -47,6 +49,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const store = idbIdentityStore();
 let identity: Identity | null = null;
 let tabLocked = false;
+/** Ein Gespräch läuft in dieser Seite (es gibt höchstens eins je Seitenaufruf). */
+let inCall = false;
 
 function loadName(): string {
   try {
@@ -82,10 +86,12 @@ function onHello(peerId: string, name: string): void {
 
 const nameValue = () => $<HTMLInputElement>('name').value.trim();
 
-/** Beitreten erst mit Namen, eigener Tab-Sperre und gesicherter (oder bewusst flüchtiger) Identität. */
+const joinState = () => ({ name: nameValue(), tabLocked, identity });
+
 function updateJoinButton(): void {
-  const ok = tabLocked && identity !== null && (identity.backedUp || !identity.persistent) && nameValue() !== '';
-  $<HTMLButtonElement>('join').disabled = !ok;
+  $<HTMLButtonElement>('join').disabled = !canJoin(joinState());
+  // Der Hinweis gilt nur, solange die Pflichtsicherung fehlt.
+  $('join-hint').hidden = !(tabLocked && identity !== null && !identity.backedUp && identity.persistent);
 }
 
 /** Einmal je Seitenaufruf: Tab sperren, Identität laden, Sicherung anbieten oder verlangen. */
@@ -142,10 +148,13 @@ async function join(secret: string): Promise<void> {
   else if (!capture.processed) view.notice('Rauschunterdrückung und Sprachaktivierung sind in diesem Browser nicht verfügbar.');
   capture?.onFallback(() => view.notice('Rauschunterdrückung und Sprachaktivierung sind ausgefallen, dein Mikrofon geht ungefiltert raus.'));
   const localStream = capture?.stream ?? null;
-  const setSettings = async (p: Partial<AudioSettings>) => {
-    settings = { ...settings, ...p };
-    saveAudioSettings(settings);
-    await capture?.update(p);
+  // Namen aller, die in dieser Sitzung da waren, für die Raumliste (auch wer schon wieder gegangen ist).
+  const seen = new Set<string>();
+  const onChange = (peers: PeerView[]) => {
+    view.renderPeers(peers);
+    const before = seen.size;
+    for (const p of peers) if (p.name) seen.add(p.name);
+    if (seen.size !== before) saveRooms(notePeers(loadRooms(), secret, [...seen]));
   };
   const drone = new RoomWS(ROOMWS_CHANNEL, { url: ROOMWS_URL });
   const selfId = me.peerId;
@@ -154,14 +163,35 @@ async function join(secret: string): Promise<void> {
     signaling, selfId, selfPub: me.pub, name, localStream, iceServers,
     onTrack: view.attachAudio,
     onPeerGone: view.detachAudio,
-    onChange: view.renderPeers,
+    onChange,
     onHello,
   });
+  // Ohne Mikrofon oder im Modus Stumm sehen die anderen „stumm geschaltet“ (Kontrollkanal, Spec §6).
+  const syncMuted = () => mesh.setMuted(!capture || settings.mode === 'muted');
+  const setSettings = async (p: Partial<AudioSettings>) => {
+    settings = { ...settings, ...p };
+    saveAudioSettings(settings);
+    if (p.mode !== undefined) syncMuted();
+    await capture?.update(p);
+  };
+  syncMuted();
   mesh.start();
 
-  $<HTMLInputElement>('link').value = buildLink(location.origin, secret);
+  initCallHeader({
+    secret,
+    link: buildLink(location.origin, secret),
+    rooms: () => loadRooms(),
+    setRooms: (r) => saveRooms(r),
+    notice: view.notice,
+  });
   view.renderPeers([]);
   view.show('call');
+  inCall = true;
+  if (capture?.needsGesture()) $('unmute-audio').hidden = false;
+  $('unmute-audio').onclick = () => {
+    view.resumeAllAudio();
+    void capture?.resume();
+  };
 
   initControls({ capture, settings: () => settings, setSettings });
   const speakingTimer = setInterval(() => view.markSpeaking(mesh.audioLevels()), 100);
@@ -173,13 +203,15 @@ async function join(secret: string): Promise<void> {
     setSettings,
   });
 
-  $('leave').onclick = async () => {
+  // „‹“ und „Verlassen“ tun dasselbe: raus aus dem Raum, zurück zu den Räumen (ohne Fragment, also kein Auto-Beitritt).
+  const leave = async () => {
     clearInterval(speakingTimer);
     stopDebug();
     capture?.close();
     await mesh.leave();
-    location.reload();
+    location.assign(location.pathname);
   };
+  $('leave').onclick = $('back').onclick = () => void leave();
   // Beim Schließen des Tabs reicht die Zeit meist nicht mehr fürs Signieren: Dann greift die Gnadenfrist nach member_leave.
   addEventListener('pagehide', () => void mesh.leave(), { once: true });
 
@@ -228,25 +260,15 @@ function boot(): void {
   $('lobby-back').onclick = () => {
     location.hash = '';
   };
-  $('settings-back').onclick = () => route();
-  $('copy').onclick = async () => {
-    const btn = $('copy');
-    try {
-      await navigator.clipboard.writeText($<HTMLInputElement>('link').value);
-    } catch {
-      return;
-    }
-    btn.classList.add('done');
-    btn.title = 'Kopiert';
-    setTimeout(() => {
-      btn.classList.remove('done');
-      btn.title = 'Link kopieren';
-    }, 1500);
-  };
+  // Einstellungen aus dem Gespräch: das Gespräch läuft weiter, Zurück führt wieder hinein.
+  $('call-settings').onclick = () => view.show('settings');
+  $('settings-back').onclick = () => (inCall ? view.show('call') : route());
   $('unmute-audio').onclick = view.resumeAllAudio;
 
   let first = true;
   const route = () => {
+    // Anderer Raum im Fragment während eines Gesprächs: neu laden, pagehide verlässt das alte sauber.
+    if (inCall) return location.reload();
     const booted = first ? takeBooted() : true;
     first = false;
     const target = autoJoinTarget({ hash: location.hash, booted, autoJoin: loadPrefs().autoJoin, rooms: loadRooms() });
@@ -262,8 +284,12 @@ function boot(): void {
     $<HTMLInputElement>('name').value = loadName();
     $('name').oninput = updateJoinButton;
     $('join').onclick = () => void join(secret);
-    view.show('lobby');
-    void prepareLobby();
+    // Fehlt nichts (Name, Sicherung, eigener Tab), geht es ohne Lobby direkt ins Gespräch.
+    void prepareLobby().then(() => {
+      if (secretFromHash(location.hash) !== secret) return;
+      if (canJoin(joinState())) void join(secret);
+      else view.show('lobby');
+    });
   };
   addEventListener('hashchange', route);
   route();

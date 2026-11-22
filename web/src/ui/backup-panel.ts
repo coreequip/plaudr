@@ -11,14 +11,21 @@ export interface BackupPanelOptions {
   name: () => string;
 }
 
-/** Sicherung herunterladen und Sicherung laden in der Lobby (Spec §4). */
+/** Sicherung herunterladen und Sicherung laden, zuerst in der Lobby (Spec §4). */
 export function initBackupPanel(o: BackupPanelOptions): void {
   const panel = $('backup');
-  const again = $('backup-again');
+  const pw2 = $<HTMLInputElement>('backup-pw2');
   const error = $('backup-error');
-  const fail = (text: string) => {
-    error.textContent = text;
-    error.hidden = false;
+  const restoreError = $('restore-error');
+  const clear = () => {
+    error.hidden = restoreError.hidden = true;
+    pw2.removeAttribute('aria-invalid');
+  };
+  // Fehler der Sicherung stehen unter dem zweiten Passwortfeld, Fehler beim Laden unter dessen Passwort.
+  const fail = (text: string, at: HTMLElement = error) => {
+    clear();
+    at.textContent = text;
+    at.hidden = false;
   };
   const busy = (on: boolean) => {
     for (const id of ['backup-save', 'restore-load']) $<HTMLButtonElement>(id).disabled = on;
@@ -37,20 +44,18 @@ export function initBackupPanel(o: BackupPanelOptions): void {
   const done = (id: Identity) => {
     o.setIdentity(id);
     for (const f of ['backup-pw', 'backup-pw2', 'restore-pw']) $<HTMLInputElement>(f).value = '';
-    error.hidden = true;
+    clear();
     panel.hidden = true;
-    again.hidden = false;
-  };
-
-  again.onclick = () => {
-    panel.hidden = false;
-    again.hidden = true;
   };
 
   $('backup-save').onclick = async () => {
     const pw = $<HTMLInputElement>('backup-pw').value;
     if (pw.length < MIN_PASSWORD_LENGTH) return fail(`Das Passwort braucht mindestens ${MIN_PASSWORD_LENGTH} Zeichen.`);
-    if (pw !== $<HTMLInputElement>('backup-pw2').value) return fail('Die Passwörter stimmen nicht überein.');
+    if (pw !== pw2.value) {
+      fail('Die Passwörter stimmen nicht überein.');
+      pw2.setAttribute('aria-invalid', 'true');
+      return;
+    }
     busy(true);
     try {
       const current = o.identity();
@@ -66,13 +71,13 @@ export function initBackupPanel(o: BackupPanelOptions): void {
 
   $('restore-load').onclick = async () => {
     const file = $<HTMLInputElement>('restore-file').files?.[0];
-    if (!file) return fail('Wähle zuerst die Sicherungsdatei.');
+    if (!file) return fail('Wähle zuerst die Sicherungsdatei.', restoreError);
     busy(true);
     try {
       const stored = await restoreBackup(await file.text(), $<HTMLInputElement>('restore-pw').value);
       done(await persist(await identityFrom(stored, true)));
     } catch (err) {
-      fail(err instanceof BackupError && err.reason === 'decrypt' ? 'Passwort falsch oder Datei beschädigt.' : 'Das ist keine plaudr-Sicherung.');
+      fail(err instanceof BackupError && err.reason === 'decrypt' ? 'Passwort falsch oder Datei beschädigt.' : 'Das ist keine plaudr-Sicherung.', restoreError);
     } finally {
       busy(false);
     }
@@ -83,7 +88,11 @@ export function initBackupPanel(o: BackupPanelOptions): void {
 export function showBackupState(id: Identity): void {
   const required = !id.backedUp && id.persistent;
   $('backup').hidden = !required;
-  $('backup-again').hidden = required;
+}
+
+/** Hängt die Sicherungskarte in einen anderen Bildschirm um (Einstellungen); Zustand und Handler bleiben. */
+export function mountBackupPanel(slot: HTMLElement): void {
+  slot.append($('backup'));
 }
 
 function fileName(base: string): string {

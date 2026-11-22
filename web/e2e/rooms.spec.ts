@@ -1,14 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeContexts, join, newContext, open, roomHash } from './helpers';
+import { closeContexts, expectDirectCall, join, newContext, open, roomHash } from './helpers';
 
 test.afterEach(closeContexts);
 
 const secretOf = (hash: string) => hash.slice(1);
 
-/** Tritt bei und kehrt ohne Verlassen-Knopf zur Startseite zurück (gleicher Kontext, gleiche Sitzung). */
+/** Tritt bei und verlässt den Raum wieder über „Verlassen“ (gleicher Kontext, gleiche Sitzung). */
 async function joinAndGoHome(page: Page, name: string): Promise<void> {
   await join(page, name);
-  await page.goto('/');
+  await page.click('#leave');
   await expect(page.locator('#start')).toBeVisible();
 }
 
@@ -24,7 +24,6 @@ test('nach Beitritt und Verlassen steht der Raum als „Raum vom <heute>“ in d
   const hash = roomHash('liste');
   const page = await open(browser, hash);
   await joinAndGoHome(page, 'Anna');
-  // Neuladen in derselben Sitzung betritt nicht erneut.
   await expect(page.locator('#lobby')).toBeHidden();
   const card = page.locator('#rooms-list li');
   await expect(card).toHaveCount(1);
@@ -79,7 +78,7 @@ test('eingefügter Link öffnet die Lobby, Unsinn zeigt den Fehler', async ({ br
   expect(page.url()).toContain(hash);
 });
 
-test('neue Seite im selben Kontext mit leerem sessionStorage landet im letzten Raum (Fragment gesetzt)', async ({ browser }) => {
+test('neue Seite im selben Kontext mit leerem sessionStorage landet ohne Lobby im letzten Raum (Fragment gesetzt)', async ({ browser }) => {
   const hash = roomHash('auto');
   const ctx = await newContext(browser);
   const first = await ctx.newPage();
@@ -88,8 +87,49 @@ test('neue Seite im selben Kontext mit leerem sessionStorage landet im letzten R
   await first.close(); // sonst greift die Tab-Sperre
   const second = await ctx.newPage();
   await second.goto('/');
-  await expect(second.locator('#lobby')).toBeVisible();
+  await expectDirectCall(second);
   expect(new URL(second.url()).hash).toBe(hash);
+});
+
+test('Verlassen führt zu Deine Räume, kein Auto-Beitritt', async ({ browser }) => {
+  const hash = roomHash('raus');
+  const page = await open(browser, hash);
+  await join(page, 'Anna');
+  await page.click('#leave');
+  await expect(page.locator('#start')).toBeVisible();
+  expect(page.url()).not.toContain('#');
+  await page.reload();
+  await expect(page.locator('#start')).toBeVisible();
+  await expect(page.locator('#call')).toBeHidden();
+
+  // „‹“ verlässt genauso; der zweite Beitritt kommt ohne Lobby aus.
+  await page.locator('#rooms-list li .room-join').click();
+  await expectDirectCall(page);
+  await page.click('#back');
+  await expect(page.locator('#start')).toBeVisible();
+  expect(page.url()).not.toContain('#');
+});
+
+test('Raum im Gespräch umbenennen erscheint in der Liste', async ({ browser }) => {
+  const page = await open(browser, roomHash('kopf'));
+  await join(page, 'Anna');
+  const heute = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long' }).format(new Date());
+  await expect(page.locator('#room-title')).toHaveText(`Raum vom ${heute}`);
+
+  await page.click('#room-rename');
+  await page.fill('#room-name-input', 'Verworfen');
+  await page.press('#room-name-input', 'Escape');
+  await expect(page.locator('#room-title')).toHaveText(`Raum vom ${heute}`);
+
+  await page.click('#room-rename');
+  await expect(page.locator('#room-name-input')).toBeFocused();
+  await page.fill('#room-name-input', 'Spieleabend');
+  await page.press('#room-name-input', 'Enter');
+  await expect(page.locator('#room-title')).toHaveText('Spieleabend');
+  await expect(page.locator('#room-name-input')).toBeHidden();
+
+  await page.click('#back');
+  await expect(page.locator('#rooms-list li .room-title')).toHaveText('Spieleabend');
 });
 
 test('ein gewählter Farbton ändert --accent', async ({ browser }) => {

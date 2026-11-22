@@ -63,6 +63,12 @@ export async function join(page: Page, name: string): Promise<void> {
   await expect(page.locator('#lobby')).toBeHidden();
 }
 
+/** Name gemerkt, Schlüssel gesichert, Tab frei: ohne Lobby direkt im Gespräch. */
+export async function expectDirectCall(page: Page): Promise<void> {
+  await expect(page.locator('#call')).toBeVisible();
+  await expect(page.locator('#lobby')).toBeHidden();
+}
+
 export const connected = (page: Page) =>
   page.evaluate(() => (window.plaudr?.peers() ?? []).filter((p) => p.state === 'connected').length);
 export const peerCount = (page: Page) => page.evaluate(() => window.plaudr?.peers().length ?? 0);

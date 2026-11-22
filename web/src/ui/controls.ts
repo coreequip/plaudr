@@ -21,15 +21,23 @@ export interface ControlsOptions {
   setSettings: (p: Partial<AudioSettings>) => Promise<void>;
 }
 
-/** Sprechmodus, PTT (Knopf und Leertaste), Schwelle, Rauschunterdrückung, eigene Sprechanzeige. */
+const pct = (v: number) => `${Math.round(v * 100)} %`;
+
+/** Sprechmodus, Pegel mit Schwelle, PTT (Knopf und Leertaste), Rauschunterdrückung, eigene Sprechanzeige. */
 export function initControls(o: ControlsOptions): () => void {
   const { capture } = o;
+  const showThreshold = (t: number) => {
+    $('vad-threshold-label').textContent = `Schwelle ${pct(t)}`;
+    $('vad-mark').style.left = `${t * 100}%`;
+  };
   const render = () => {
     const s = o.settings();
     for (const m of MODES) $(`mode-${m}`).setAttribute('aria-pressed', String(s.mode === m));
-    $('ptt').hidden = s.mode !== 'ptt';
-    $('vad-threshold-row').hidden = s.mode !== 'vad';
+    // Ohne Mikrofon gibt es weder Pegel noch etwas zum Halten.
+    $('ptt').hidden = !capture || s.mode !== 'ptt';
+    $('vad-meter').hidden = !capture || s.mode !== 'vad';
     $<HTMLInputElement>('vad-threshold').value = String(s.threshold);
+    showThreshold(s.threshold);
     $<HTMLInputElement>('denoise').checked = s.denoise;
   };
 
@@ -42,17 +50,22 @@ export function initControls(o: ControlsOptions): () => void {
     };
   }
   $<HTMLInputElement>('vad-threshold').disabled = !capture;
-  $<HTMLInputElement>('vad-threshold').oninput = (e) =>
-    void o.setSettings({ threshold: Number((e.target as HTMLInputElement).value) });
+  $<HTMLInputElement>('vad-threshold').oninput = (e) => {
+    const t = Number((e.target as HTMLInputElement).value);
+    showThreshold(t);
+    void o.setSettings({ threshold: t });
+  };
   $<HTMLInputElement>('denoise').disabled = !capture;
   $<HTMLInputElement>('denoise').onchange = (e) => void o.setSettings({ denoise: (e.target as HTMLInputElement).checked });
 
   const isPtt = () => o.settings().mode === 'ptt';
   // Loslassen immer durchreichen, auch wenn der Modus inzwischen gewechselt hat.
-  const setPressed = (p: boolean) => {
-    if (!p || isPtt()) capture?.setPressed(p);
-  };
   const ptt = $<HTMLButtonElement>('ptt');
+  const setPressed = (p: boolean) => {
+    if (p && !isPtt()) return;
+    capture?.setPressed(p);
+    ptt.classList.toggle('active', p);
+  };
   ptt.onpointerdown = (e) => {
     ptt.setPointerCapture(e.pointerId);
     setPressed(true);
@@ -61,7 +74,12 @@ export function initControls(o: ControlsOptions): () => void {
   const unbindKeys = bindPttKeys(window, setPressed, isTyping, isPtt);
 
   const me = $('me-speaking');
-  capture?.onActivity((a) => (me.hidden = !a.open));
+  const level = $('vad-level');
+  capture?.onActivity((a) => {
+    me.hidden = !a.open;
+    level.style.width = `${Math.min(1, Math.max(0, a.vad)) * 100}%`;
+    level.classList.toggle('open', a.open);
+  });
 
   render();
   return unbindKeys;

@@ -25,6 +25,7 @@ test('neuer Schlüssel muss vor dem Beitritt gesichert werden', async ({ browser
   await a.fill('#name', 'Anna');
   await expect(a.locator('#backup')).toBeVisible();
   await expect(a.locator('#join')).toBeDisabled();
+  await expect(a.locator('#join-hint')).toHaveText('Beitreten geht, sobald der Schlüssel gesichert ist.');
 
   await a.fill('#backup-pw', 'kurz');
   await a.fill('#backup-pw2', 'kurz');
@@ -35,13 +36,15 @@ test('neuer Schlüssel muss vor dem Beitritt gesichert werden', async ({ browser
   await a.fill('#backup-pw2', BACKUP_PW + 'x');
   await a.click('#backup-save');
   await expect(a.locator('#backup-error')).toHaveText('Die Passwörter stimmen nicht überein.');
+  await expect(a.locator('#backup-pw2')).toHaveAttribute('aria-invalid', 'true');
 
   const file = JSON.parse(await backup(a));
   expect(file).toMatchObject({ format: 'plaudr-identity', v: 1 });
   await expect(a.locator('#join')).toBeEnabled();
+  await expect(a.locator('#join-hint')).toBeHidden();
 });
 
-test('nach Neuladen ist keine erneute Sicherung nötig, sie bleibt aber möglich', async ({ browser }) => {
+test('nach Neuladen ist keine erneute Sicherung nötig', async ({ browser }) => {
   const a = await open(browser, roomHash('neuladen2'));
   await ready(a);
   await backup(a);
@@ -50,9 +53,7 @@ test('nach Neuladen ist keine erneute Sicherung nötig, sie bleibt aber möglich
   await expect(a.locator('#backup')).toBeHidden();
   await a.fill('#name', 'Anna');
   await expect(a.locator('#join')).toBeEnabled();
-  await a.click('#backup-again');
-  await expect(a.locator('#backup')).toBeVisible();
-  JSON.parse(await backup(a));
+  await expect(a.locator('#join-hint')).toBeHidden();
 });
 
 test('Identität per Sicherungsdatei in einen anderen Browser mitnehmen', async ({ browser }, info) => {
@@ -63,6 +64,7 @@ test('Identität per Sicherungsdatei in einen anderen Browser mitnehmen', async 
   await join(a, 'Anna');
   const id = await selfId(a);
   await a.click('#leave');
+  await expect(a.locator('#start')).toBeVisible();
 
   const b = await open(browser, h);
   await ready(b);
@@ -94,11 +96,11 @@ test('Laden mit falschem Passwort oder fremder Datei', async ({ browser }, info)
   await a.setInputFiles('#restore-file', good);
   await a.fill('#restore-pw', 'daneben-123');
   await a.click('#restore-load');
-  await expect(a.locator('#backup-error')).toHaveText('Passwort falsch oder Datei beschädigt.');
+  await expect(a.locator('#restore-error')).toHaveText('Passwort falsch oder Datei beschädigt.');
 
   await a.setInputFiles('#restore-file', bad);
   await a.fill('#restore-pw', BACKUP_PW);
   await a.click('#restore-load');
-  await expect(a.locator('#backup-error')).toHaveText('Das ist keine plaudr-Sicherung.');
+  await expect(a.locator('#restore-error')).toHaveText('Das ist keine plaudr-Sicherung.');
   await expect(a.locator('#backup')).toBeVisible();
 });

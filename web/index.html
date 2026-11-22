@@ -29,77 +29,113 @@
         </footer>
       </section>
 
-      <section id="lobby" class="screen" hidden>
-        <header class="bar">
+      <section id="lobby" class="screen lobby" hidden>
+        <header class="lobby-head">
           <button id="lobby-back" class="icon" aria-label="Zu deinen Räumen" title="Zu deinen Räumen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-          <h1>Raum beitreten</h1>
+          <div class="lobby-titles">
+            <span class="eyebrow">Einladung in einen Raum</span>
+            <h1>Bevor es losgeht</h1>
+          </div>
         </header>
-        <label for="name">Dein Name</label>
-        <input id="name" maxlength="40" autocomplete="nickname" required />
-        <div id="backup" class="card" hidden>
-          <p>Sichere deinen Schlüssel. Mit der Sicherungsdatei nimmst du deine Identität in die App oder einen anderen Browser mit.</p>
-          <label for="backup-pw">Passwort für die Sicherung</label>
-          <input id="backup-pw" type="password" autocomplete="new-password" />
-          <label for="backup-pw2">Passwort wiederholen</label>
-          <input id="backup-pw2" type="password" autocomplete="new-password" />
-          <button id="backup-save">Sicherung herunterladen</button>
+        <div class="field">
+          <label for="name">Dein Name</label>
+          <input id="name" class="tall" maxlength="40" autocomplete="nickname" required aria-describedby="name-hint" />
+          <span id="name-hint" class="hint">So sehen dich die anderen. Pflichtfeld.</span>
+        </div>
+        <p id="lobby-notice" class="warn" hidden></p>
+        <div id="backup" class="card backup-card" hidden>
+          <div class="card-head">
+            <svg class="key" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2"/><path d="m17 6 3 3"/><path d="m15 8 2 2"/></svg>
+            <div class="card-head-text">
+              <span class="card-title">Sichere deinen Schlüssel</span>
+              <span class="card-text">Dein Schlüssel ist deine Identität. Mit der Sicherungsdatei nimmst du ihn in die App oder einen anderen Browser mit.</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="backup-pw">Passwort für die Sicherung</label>
+            <input id="backup-pw" class="tall" type="password" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label for="backup-pw2">Passwort wiederholen</label>
+            <input id="backup-pw2" class="tall" type="password" autocomplete="new-password" aria-describedby="backup-error" />
+            <span id="backup-error" class="field-error" role="alert" hidden></span>
+          </div>
+          <button id="backup-save" class="outline tall">Sicherung speichern</button>
           <details id="restore">
             <summary>Schon eine Sicherung? Hier laden</summary>
             <input id="restore-file" type="file" accept=".plaudr-key,application/json" aria-label="Sicherungsdatei" />
-            <label for="restore-pw">Passwort der Sicherung</label>
-            <input id="restore-pw" type="password" autocomplete="current-password" />
-            <button id="restore-load">Sicherung laden</button>
+            <div class="field">
+              <label for="restore-pw">Passwort der Sicherung</label>
+              <input id="restore-pw" class="tall" type="password" autocomplete="current-password" aria-describedby="restore-error" />
+              <span id="restore-error" class="field-error" role="alert" hidden></span>
+            </div>
+            <button id="restore-load" class="outline tall">Sicherung laden</button>
           </details>
-          <p id="backup-error" class="warn" hidden></p>
         </div>
-        <button id="join" class="primary" disabled>Beitreten</button>
-        <button id="backup-again" class="link" hidden>Schlüssel sichern oder Sicherung laden</button>
-        <p id="lobby-notice" class="warn" hidden></p>
+        <div class="grow"></div>
+        <button id="join" class="primary big" disabled>Beitreten</button>
+        <p id="join-hint" class="hint center" hidden>Beitreten geht, sobald der Schlüssel gesichert ist.</p>
       </section>
 
-      <section id="call" class="screen" hidden>
-        <header class="bar">
-          <span class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg></span>
-          <h1>plaudr</h1>
-        </header>
-        <div class="row">
-          <input id="link" readonly aria-label="Einladungslink" />
-          <button id="copy" class="icon" aria-label="Link kopieren" title="Link kopieren">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
-          </button>
-        </div>
-        <p id="notice" hidden></p>
-        <button id="unmute-audio" class="primary" hidden>Ton aktivieren</button>
-        <ul id="peers"></ul>
-        <p id="alone">Noch niemand da. Schick den Link herum.</p>
-        <div class="modes" role="group" aria-label="Sprechmodus">
-          <button id="mode-vad" aria-pressed="false">Sprachaktivierung</button>
-          <button id="mode-ptt" aria-pressed="false">Push-to-Talk</button>
-          <button id="mode-muted" aria-pressed="false">Stumm</button>
-        </div>
-        <button id="ptt" class="primary" hidden>Zum Sprechen halten (oder Leertaste)</button>
-        <label id="vad-threshold-row" class="slider" hidden>
-          Schwelle der Sprachaktivierung
-          <input id="vad-threshold" type="range" min="0.5" max="0.99" step="0.01" />
-        </label>
-        <label class="check"><input id="denoise" type="checkbox" /> Rauschunterdrückung</label>
-        <p id="me-speaking" class="speaking-me" hidden>du sprichst</p>
-        <div class="row">
-          <button id="leave">Verlassen</button>
-        </div>
-        <details id="debug">
-          <summary>Debug</summary>
-          <div class="table-wrap">
-            <table id="debug-table">
-              <thead>
-                <tr><th>Name</th><th>RTT</th><th>Jitter</th><th>Puffer</th><th>Verlust</th><th>Weg</th><th>Mund-zu-Ohr (Schätzung)</th></tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+      <section id="call" class="screen call" hidden>
+        <header class="bar call-head">
+          <button id="back" class="icon" aria-label="Zu deinen Räumen" title="Zu deinen Räumen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+          <div class="call-title">
+            <span id="room-title"></span>
+            <button id="room-rename" class="icon flat pen" aria-label="Raum umbenennen (nur für dich)" title="Raum umbenennen (nur für dich)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+            <input id="room-name-input" maxlength="40" aria-label="Name für diesen Raum (nur für dich)" autocomplete="off" hidden />
           </div>
-          <label class="check"><input id="debug-preroll" type="checkbox" /> Vorlauf 200 ms</label>
-          <p id="debug-vad" class="muted"></p>
-        </details>
+          <button id="copy" class="icon" aria-label="Einladungslink kopieren" title="Link kopieren"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>
+          <button id="call-settings" class="icon" aria-label="Einstellungen" title="Einstellungen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+        </header>
+        <div class="call-body" aria-label="Teilnehmer" role="region">
+          <p id="notice" role="status" hidden></p>
+          <button id="unmute-audio" class="primary" hidden>Ton aktivieren</button>
+          <span id="peer-count" class="section-label">IM RAUM (0)</span>
+          <ul id="peers"></ul>
+          <p id="alone">Noch niemand da. Schick den Link herum.</p>
+          <div class="grow"></div>
+          <details id="debug">
+            <summary>Debug</summary>
+            <div class="table-wrap">
+              <table id="debug-table">
+                <thead>
+                  <tr><th>Name</th><th>RTT</th><th>Jitter</th><th>Puffer</th><th>Verlust</th><th>Weg</th><th>Mund-zu-Ohr (Schätzung)</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <label class="check"><input id="debug-preroll" type="checkbox" /> Vorlauf 200 ms</label>
+            <p id="debug-vad" class="muted"></p>
+          </details>
+        </div>
+        <footer class="call-foot">
+          <div class="modes" role="group" aria-label="Sprechmodus">
+            <button id="mode-vad" aria-pressed="false">Automatisch</button>
+            <button id="mode-ptt" aria-pressed="false">Push-to-Talk</button>
+            <button id="mode-muted" aria-pressed="false">Stumm</button>
+          </div>
+          <div id="vad-meter" hidden>
+            <div class="meter-head">
+              <span id="me-speaking" class="speaking-me" hidden>du sprichst</span>
+              <span id="vad-threshold-label">Schwelle 85 %</span>
+            </div>
+            <div class="meter" aria-hidden="true"><div id="vad-level"></div><div id="vad-mark"></div></div>
+            <label id="vad-threshold-row" class="slider">
+              Schwelle der Sprachaktivierung
+              <input id="vad-threshold" type="range" min="0.5" max="0.99" step="0.01" />
+            </label>
+          </div>
+          <button id="ptt" class="ptt" hidden>
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/></svg>
+            <span class="ptt-label">Zum Sprechen halten</span>
+            <span class="ptt-hint">oder <kbd>Leertaste</kbd></span>
+          </button>
+          <div class="foot-row">
+            <label class="check"><input id="denoise" type="checkbox" /> Rauschunterdrückung</label>
+            <button id="leave" class="danger">Verlassen</button>
+          </div>
+        </footer>
         <div id="audio" hidden></div>
       </section>
 

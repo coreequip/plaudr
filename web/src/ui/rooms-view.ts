@@ -38,8 +38,7 @@ export function initRoomsView(o: RoomsViewOptions): { render(): void } {
       const input = el('input', 'room-name-input');
       input.maxLength = 40;
       input.value = e.name ?? '';
-      input.id = 'room-name-input';
-      label.htmlFor = input.id;
+      input.setAttribute('aria-label', 'Name für diesen Raum (nur für dich)');
       const save = el('button', 'primary room-name-save', 'Speichern');
       const commit = () => {
         editing = null;

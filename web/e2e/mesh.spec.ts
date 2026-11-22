@@ -15,6 +15,39 @@ test('drei Teilnehmer hören sich', async ({ browser }) => {
   await expect(pages[0].locator('#peers')).toContainText('P2');
 });
 
+test('#peer-count zählt die Karten', async ({ browser }) => {
+  const h = roomHash('zaehlen');
+  const [a, b, c] = [await open(browser, h), await open(browser, h), await open(browser, h)];
+  await join(a, 'Anna');
+  await expect(a.locator('#peer-count')).toHaveText('IM RAUM (0)');
+  await join(b, 'Bert');
+  await join(c, 'Cem');
+  await expectMesh([a, b, c], 2);
+  await expect(a.locator('#peers li')).toHaveCount(2);
+  await expect(a.locator('#peer-count')).toHaveText('IM RAUM (2)');
+  expect((await a.locator('#peers li .avatar').allTextContents()).sort()).toEqual(['B', 'C']);
+  await c.click('#leave');
+  await expect(a.locator('#peers li')).toHaveCount(1, { timeout: 5_000 });
+  await expect(a.locator('#peer-count')).toHaveText('IM RAUM (1)');
+});
+
+test('B sieht A als stumm geschaltet, sobald A Stumm wählt', async ({ browser }) => {
+  const h = roomHash('stummanzeige');
+  const [a, b] = [await open(browser, h), await open(browser, h)];
+  await join(a, 'Anna');
+  await join(b, 'Bert');
+  await expectMesh([a, b], 1);
+  const aId = await a.evaluate(() => window.plaudr!.selfId);
+  const card = b.locator(`#peers li[data-peer="${aId}"]`);
+  await expect(card).not.toHaveClass(/\bmuted\b/);
+  await a.click('#mode-muted');
+  await expect(card).toHaveClass(/\bmuted\b/, { timeout: 5_000 });
+  await expect(card.locator('.state')).toHaveText('stumm geschaltet');
+  await expect(card).not.toHaveClass(/\bspeaking\b/);
+  await a.click('#mode-vad');
+  await expect(card).not.toHaveClass(/\bmuted\b/, { timeout: 5_000 });
+});
+
 test('gleichzeitiger Beitritt', async ({ browser }) => {
   const h = roomHash('gleichzeitig');
   const pages = await Promise.all([open(browser, h), open(browser, h), open(browser, h)]);

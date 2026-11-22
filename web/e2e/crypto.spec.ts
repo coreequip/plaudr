@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { bytes, closeContexts, connected, expectMesh, join, newContext, open, openIn, peerCount, roomHash } from './helpers';
+import { bytes, closeContexts, connected, expectDirectCall, expectMesh, join, newContext, open, openIn, peerCount, roomHash } from './helpers';
 import { openIntruder } from './intruder';
 
 const selfId = (p: import('@playwright/test').Page) => p.evaluate(() => window.plaudr!.selfId);
@@ -65,7 +65,7 @@ test('Identität bleibt über Neuladen erhalten', async ({ browser }) => {
   const id = await selfId(a);
   expect(id).toMatch(/^[a-z2-7]{26}$/);
   await a.reload();
-  await join(a, 'Anna');
+  await expectDirectCall(a);
   expect(await selfId(a)).toBe(id);
 });
 
@@ -91,7 +91,7 @@ test('Neuladen ohne bye (wie ein Absturz): beide finden sofort wieder zusammen',
     WebSocket.prototype.send = function () {};
   });
   await b.reload();
-  await join(b, 'Bert');
+  await expectDirectCall(b);
   await expectMesh([a, b], 1);
   await expect.poll(() => bytes(a).then((x) => Object.values(x)[0] ?? 0)).toBeGreaterThan(0);
   await expect.poll(() => bytes(b).then((x) => Object.values(x)[0] ?? 0)).toBeGreaterThan(0);
