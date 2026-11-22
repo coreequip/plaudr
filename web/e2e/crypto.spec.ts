@@ -52,7 +52,7 @@ test('hello mit fremder peerId wird abgewiesen', async ({ browser }) => {
   await expectMesh([a, b], 1);
   const aId = await selfId(a);
   const evil = await openIntruder(browser, h);
-  await evil.forge({ kind: 'hello', from: aId, to: '*', body: { pub: evil.pub, name: 'Anna', caps: [] } });
+  await evil.forge({ kind: 'hello', from: aId, to: '*', body: { pub: evil.pub, sid: 'S', name: 'Anna', caps: [] } });
   await expect.poll(() => rejected(b, 'identity')).toBe(1);
   await expect(b.locator('#peers li')).toHaveCount(1);
   expect(await connected(b)).toBe(1);
@@ -80,4 +80,20 @@ test('zweiter Tab im selben Browser tritt nicht bei', async ({ browser }) => {
   await expect(second.locator('#lobby-notice')).toHaveText('plaudr ist in diesem Browser schon in einem anderen Tab offen.');
   await expect(second.locator('#call')).toBeHidden();
   await expect(second.locator('#join')).toBeEnabled();
+});
+
+test('Neuladen ohne bye (wie ein Absturz): beide finden sofort wieder zusammen', async ({ browser }) => {
+  const h = roomHash('ohnebye');
+  const [a, b] = [await open(browser, h), await open(browser, h)];
+  await join(a, 'Anna');
+  await join(b, 'Bert');
+  await expectMesh([a, b], 1);
+  await b.evaluate(() => {
+    WebSocket.prototype.send = function () {};
+  });
+  await b.reload();
+  await join(b, 'Bert');
+  await expectMesh([a, b], 1);
+  await expect.poll(() => bytes(a).then((x) => Object.values(x)[0] ?? 0)).toBeGreaterThan(0);
+  await expect.poll(() => bytes(b).then((x) => Object.values(x)[0] ?? 0)).toBeGreaterThan(0);
 });

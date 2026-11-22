@@ -1,5 +1,6 @@
 import type { Signaling } from '../signaling/signaling';
 import type { Bodies, Payload } from '../signaling/types';
+import { randomBase64url } from '../util/base64url';
 import { PeerLink, type PeerLinkLike, type PeerLinkOptions } from './peer-link';
 
 const LEAVE_GRACE_MS = 5000;
@@ -16,6 +17,8 @@ export interface MeshOptions {
   signaling: SignalingLike;
   selfId: string;
   selfPub: string;
+  /** Kennung dieser Sitzung; Standard: zufällig. */
+  sid?: string;
   name: string;
   localStream: MediaStream | null;
   iceServers: RTCIceServer[];
@@ -31,11 +34,14 @@ export interface MeshOptions {
 export class Mesh {
   private readonly links = new Map<string, PeerLinkLike>();
   private readonly pendingNames = new Map<string, string>();
+  private readonly sids = new Map<string, string>();
+  private readonly sid: string;
   private readonly leaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly createLink: (o: PeerLinkOptions) => PeerLinkLike;
 
   constructor(private readonly o: MeshOptions) {
     this.createLink = o.createLink ?? ((opts) => new PeerLink(opts));
+    this.sid = o.sid ?? randomBase64url(8);
   }
 
   start(): void {
@@ -80,8 +86,16 @@ export class Mesh {
     let link = this.links.get(p.from);
     switch (p.kind) {
       case 'hello': {
-        const name = (p.body as Bodies['hello']).name;
+        const { name, sid } = p.body as Bodies['hello'];
         this.o.onHello?.(p.from, name);
+        // Neue Sitzung derselben Identität (Neuladen oder Absturz ohne bye): Der alte Link ist tot, und das
+        // Gegenüber kennt meinen Schlüssel nicht mehr. Also wie einen Neuen behandeln.
+        const knownSid = this.sids.get(p.from);
+        if (link && knownSid !== undefined && knownSid !== sid) {
+          this.remove(p.from);
+          link = undefined;
+        }
+        this.sids.set(p.from, sid);
         if (link) {
           this.setCid(p.from, link, p.cid);
           link.name = name;
@@ -112,7 +126,7 @@ export class Mesh {
   }
 
   private helloBody(): Bodies['hello'] {
-    return { pub: this.o.selfPub, name: this.o.name, caps: [] };
+    return { pub: this.o.selfPub, sid: this.sid, name: this.o.name, caps: [] };
   }
 
   private add(peerId: string, cid: string, name: string): PeerLinkLike {
@@ -166,6 +180,7 @@ export class Mesh {
     const link = this.links.get(peerId);
     if (!link) return;
     this.links.delete(peerId);
+    this.sids.delete(peerId);
     link.close();
     this.o.onPeerGone(peerId);
     this.changed();

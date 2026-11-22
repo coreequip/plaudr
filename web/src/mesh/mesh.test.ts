@@ -41,8 +41,8 @@ let gone: string[];
 let mesh: Mesh;
 let hellos: [string, string][];
 
-const hello = (from: string, cid = 'c-' + from, name = from) =>
-  sig.emitMsg({ kind: 'hello', from, cid, body: { pub: 'PUB-' + from, name, caps: [] } });
+const hello = (from: string, cid = 'c-' + from, name = from, sid = 'S-' + from) =>
+  sig.emitMsg({ kind: 'hello', from, cid, body: { pub: 'PUB-' + from, sid, name, caps: [] } });
 const linksFor = (id: string) => links.filter((l) => l.peerId === id);
 const live = (id: string) => linksFor(id).filter((l) => !l.closed);
 
@@ -52,7 +52,7 @@ beforeEach(() => {
   gone = [];
   hellos = [];
   mesh = new Mesh({
-    signaling: sig, selfId: 'M', selfPub: 'PUB-M', name: 'Mira', localStream: null, iceServers: [],
+    signaling: sig, selfId: 'M', selfPub: 'PUB-M', sid: 'S-M', name: 'Mira', localStream: null, iceServers: [],
     createLink: (o) => { const l = new FakeLink(o); links.push(l); return l; },
     onTrack: () => {}, onPeerGone: (id) => gone.push(id), onChange: () => {},
     onHello: (id, n) => hellos.push([id, n]),
@@ -62,7 +62,7 @@ beforeEach(() => {
 
 test('ready schickt hello an alle', () => {
   sig.ready.forEach((cb) => cb('c-self'));
-  expect(sig.sent).toEqual([{ kind: 'hello', to: '*', body: { pub: 'PUB-M', name: 'Mira', caps: [] } }]);
+  expect(sig.sent).toEqual([{ kind: 'hello', to: '*', body: { pub: 'PUB-M', sid: 'S-M', name: 'Mira', caps: [] } }]);
 });
 
 describe('hello', () => {
@@ -83,10 +83,10 @@ describe('hello', () => {
   test('beantwortet hello eines Unbekannten direkt mit eigenem Namen, ein bekanntes nicht', () => {
     hello('B');
     hello('B', 'c-new');
-    expect(sig.sent).toEqual([{ kind: 'hello', to: 'B', body: { pub: 'PUB-M', name: 'Mira', caps: [] } }]);
+    expect(sig.sent).toEqual([{ kind: 'hello', to: 'B', body: { pub: 'PUB-M', sid: 'S-M', name: 'Mira', caps: [] } }]);
   });
   test('an mich gerichtetes hello eines Unbekannten legt keinen Link an, liefert aber den Namen fürs offer', () => {
-    sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { pub: 'PUB-C', name: 'Cem', caps: [] } });
+    sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { pub: 'PUB-C', sid: 'S', name: 'Cem', caps: [] } });
     expect(links).toHaveLength(0);
     expect(sig.sent).toEqual([]);
     sig.emitMsg({ kind: 'offer', from: 'C', body: { sdp: 'x' } });
@@ -213,7 +213,33 @@ test('leave verabschiedet sich und räumt auf', async () => {
 
 test('onHello meldet hello an alle und gerichtetes hello, nicht das eigene', () => {
   hello('B', 'c-B', 'Bea');
-  sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { pub: 'PUB-C', name: 'Cem', caps: [] } });
-  sig.emitMsg({ kind: 'hello', from: 'M', body: { pub: 'PUB-M', name: 'Mira', caps: [] } });
+  sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { pub: 'PUB-C', sid: 'S', name: 'Cem', caps: [] } });
+  sig.emitMsg({ kind: 'hello', from: 'M', body: { pub: 'PUB-M', sid: 'S', name: 'Mira', caps: [] } });
   expect(hellos).toEqual([['B', 'Bea'], ['C', 'Cem']]);
+});
+
+describe('neue Sitzung desselben Teilnehmers (Neuladen ohne bye)', () => {
+  test('hello an alle mit neuer sid ersetzt den alten Link und antwortet direkt', () => {
+    hello('B', 'c-old', 'Bea', 'S-1');
+    sig.sent = [];
+    hello('B', 'c-new', 'Bea', 'S-2');
+    expect(linksFor('B')).toHaveLength(2);
+    expect(linksFor('B')[0].closed).toBe(true);
+    expect(live('B')).toHaveLength(1);
+    expect(live('B')[0].cid).toBe('c-new');
+    expect(sig.sent).toEqual([{ kind: 'hello', to: 'B', body: { pub: 'PUB-M', sid: 'S-M', name: 'Mira', caps: [] } }]);
+  });
+  test('gleiche sid mit neuer cid (Signaling-Reconnect) behält den Link', () => {
+    hello('B', 'c-old', 'Bea', 'S-1');
+    hello('B', 'c-new', 'Bea', 'S-1');
+    expect(linksFor('B')).toHaveLength(1);
+  });
+  test('ein Link aus einem offer übernimmt die sid aus dem späteren hello ohne Neuaufbau', () => {
+    sig.emitMsg({ kind: 'offer', from: 'C', to: 'M', body: { sdp: 'x' } });
+    hello('C', 'c-C', 'Cem', 'S-1');
+    expect(linksFor('C')).toHaveLength(1);
+    hello('C', 'c-C2', 'Cem', 'S-2');
+    expect(live('C')).toHaveLength(1);
+    expect(linksFor('C')).toHaveLength(2);
+  });
 });

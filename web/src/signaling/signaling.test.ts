@@ -81,7 +81,7 @@ interface BuildOpts {
 /** Baut einen Umschlag, wie ihn `from` senden würde; Felder in `p` überschreiben die Vorgaben. */
 async function build(from: Identity, p: Partial<Payload> = {}, o: BuildOpts = {}) {
   const kind = p.kind ?? 'hello';
-  const body = kind === 'hello' ? { pub: from.pub, name: 'Name', caps: [] } : { sdp: 'v=0\r\na=fingerprint:sha-256 11:22\r\n' };
+  const body = kind === 'hello' ? { pub: from.pub, sid: 'S', name: 'Name', caps: [] } : { sdp: 'v=0\r\na=fingerprint:sha-256 11:22\r\n' };
   const full = { kind, from: from.peerId, to: '*', cid: cidOf.get(from)!, ts: NOW, nonce: randomBase64url(16), body, ...p };
   const pStr = JSON.stringify(full);
   const signed = await (o.sigFrom ?? from).sign(pStr);
@@ -113,7 +113,7 @@ describe('senden', () => {
   });
 
   test('send versiegelt: room_ws sieht nur v, iv, ct', async () => {
-    sig.send('hello', '*', { pub: A.pub, name: 'Anna', caps: [] });
+    sig.send('hello', '*', { pub: A.pub, sid: 'S', name: 'Anna', caps: [] });
     await sig.idle();
     expect(drone.published).toHaveLength(1);
     const m = drone.published[0];
@@ -124,7 +124,7 @@ describe('senden', () => {
   });
 
   test('Gegenprobe: entschlüsselbar, Signatur passt, Nutzlast korrekt', async () => {
-    sig.send('hello', '*', { pub: A.pub, name: 'Anna', caps: [] });
+    sig.send('hello', '*', { pub: A.pub, sid: 'S', name: 'Anna', caps: [] });
     await sig.idle();
     const { payload, p, sig: s } = await published(0);
     expect(await verifySignature(A.pub, s, p)).toBe(true);
@@ -136,7 +136,7 @@ describe('senden', () => {
     let first = true;
     makeSignaling({ ...A, sign: async (d) => ((first ? ((first = false), await sleep(30)) : 0), A.sign(d)) });
     drone.room.emit('members', ['c-self']);
-    sig.send('hello', '*', { pub: A.pub, name: 'Anna', caps: [] });
+    sig.send('hello', '*', { pub: A.pub, sid: 'S', name: 'Anna', caps: [] });
     sig.send('offer', B.peerId, { sdp: 'x' });
     sig.send('ice', B.peerId, { c: [] });
     await sig.idle();
@@ -203,7 +203,7 @@ describe('empfangen', () => {
   });
 
   test('hello mit fremder peerId wird abgewiesen und der Schlüssel nicht gemerkt', async () => {
-    await incoming(C, { from: B.peerId, body: { pub: C.pub, name: 'Bea', caps: [] } });
+    await incoming(C, { from: B.peerId, body: { pub: C.pub, sid: 'S', name: 'Bea', caps: [] } });
     expect(rejected()).toEqual({ identity: 1 });
     await incoming(B, { kind: 'offer', to: A.peerId });
     expect(got).toHaveLength(0);

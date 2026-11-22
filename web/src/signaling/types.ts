@@ -1,5 +1,6 @@
 export interface Bodies {
-  hello: { pub: string; name: string; caps: string[] };
+  /** sid: zufällig je Seitenaufruf; eine neue sid bei bekannter peerId heißt: alte Sitzung ist tot. */
+  hello: { pub: string; sid: string; name: string; caps: string[] };
   offer: { sdp: string };
   answer: { sdp: string };
   ice: { c: RTCIceCandidateInit[] };
