@@ -117,8 +117,9 @@ Nutzlast:
 
 | Ereignis | Aktion |
 |---|---|
-| Eigener Beitritt (`members`) | `hello` an `*`: `{pub, name, caps}` |
+| Eigener Beitritt (`members`) | `hello` an `*`: `{pub, sid, name, caps}`; `sid` zufällig je Seitenaufruf |
 | `hello` von unbekanntem Peer | Peer anlegen; bestehende Mitglieder senden `offer` |
+| `hello` mit bekannter peerId, neuer `sid` | alte Sitzung ist tot (Neuladen ohne `bye`): Link verwerfen, wie unbekannten Peer behandeln |
 | Gleichzeitiger Beitritt | Perfect Negotiation; **polite = kleinere peerId** |
 | `ice` | Kandidaten gebündelt: alle 80 ms ein Umschlag pro Peer, `body.c = [...]` |
 | `member_leave(cid)` / `bye` | PeerConnection zu dieser cid schließen |
