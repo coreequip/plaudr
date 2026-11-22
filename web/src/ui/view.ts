@@ -9,10 +9,10 @@ const STATE_LABEL: Record<RTCPeerConnectionState, string> = {
 const VOLUMES_KEY = 'plaudr.volumes';
 const SPEAKING_LEVEL = 0.01;
 
-export type Screen = 'start' | 'lobby' | 'call';
+export type Screen = 'start' | 'lobby' | 'call' | 'settings';
 
 export function show(screen: Screen): void {
-  for (const s of ['start', 'lobby', 'call'] as const) $(s).hidden = s !== screen;
+  for (const s of ['start', 'lobby', 'call', 'settings'] as const) $(s).hidden = s !== screen;
 }
 
 export function notice(text: string): void {

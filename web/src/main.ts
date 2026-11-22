@@ -10,12 +10,17 @@ import { loadOrCreateIdentity, type Identity } from './crypto/identity';
 import { idbIdentityStore } from './crypto/identity-store';
 import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
+import { autoJoinTarget } from './room/auto-join';
+import { loadRooms, noteJoin, saveRooms } from './room/rooms';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
 import { initBackupPanel, showBackupState } from './ui/backup-panel';
 import { initControls } from './ui/controls';
 import { initDebug } from './ui/debug';
+import { loadPrefs } from './ui/prefs';
+import { initRoomsView } from './ui/rooms-view';
+import { applyTheme } from './ui/theme';
 import * as view from './ui/view';
 
 declare global {
@@ -131,6 +136,7 @@ async function join(secret: string): Promise<void> {
     fetchIceServers(TURN_URL),
     deriveRoom(secret),
   ]);
+  saveRooms(noteJoin(loadRooms(), secret, Date.now()));
   if (!me.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
   if (!capture) view.notice('Kein Mikrofon: du hörst nur zu.');
   else if (!capture.processed) view.notice('Rauschunterdrückung und Sprachaktivierung sind in diesem Browser nicht verfügbar.');
@@ -192,10 +198,37 @@ async function join(secret: string): Promise<void> {
   };
 }
 
+const BOOTED_KEY = 'plaudr.booted';
+
+/** Liest und setzt die Sitzungsmarke: true, wenn diese Browsersitzung schon einmal geroutet hat. */
+function takeBooted(): boolean {
+  try {
+    const was = sessionStorage.getItem(BOOTED_KEY) !== null;
+    sessionStorage.setItem(BOOTED_KEY, '1');
+    return was;
+  } catch {
+    return false;
+  }
+}
+
 function boot(): void {
-  $('create').onclick = () => {
-    location.hash = createRoomSecret();
+  applyTheme(loadPrefs());
+  const rooms = initRoomsView({
+    rooms: () => loadRooms(),
+    setRooms: (r) => saveRooms(r),
+    autoJoin: () => loadPrefs().autoJoin,
+    open: (secret) => {
+      location.hash = secret;
+    },
+    create: () => {
+      location.hash = createRoomSecret();
+    },
+    settings: () => view.show('settings'),
+  });
+  $('lobby-back').onclick = () => {
+    location.hash = '';
   };
+  $('settings-back').onclick = () => route();
   $('copy').onclick = async () => {
     const btn = $('copy');
     try {
@@ -212,9 +245,20 @@ function boot(): void {
   };
   $('unmute-audio').onclick = view.resumeAllAudio;
 
+  let first = true;
   const route = () => {
+    const booted = first ? takeBooted() : true;
+    first = false;
+    const target = autoJoinTarget({ hash: location.hash, booted, autoJoin: loadPrefs().autoJoin, rooms: loadRooms() });
+    if (target) {
+      location.hash = target;
+      return;
+    }
     const secret = secretFromHash(location.hash);
-    if (!secret) return view.show('start');
+    if (!secret) {
+      rooms.render();
+      return view.show('start');
+    }
     $<HTMLInputElement>('name').value = loadName();
     $('name').oninput = updateJoinButton;
     $('join').onclick = () => void join(secret);
