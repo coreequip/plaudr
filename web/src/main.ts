@@ -12,7 +12,7 @@ import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { autoJoinTarget } from './room/auto-join';
 import { canJoin, needsBackup } from './room/join-rule';
-import { activeShortcutLabel, loadPlatform, type AppActions, type AppState, type Platform } from './platform/platform';
+import { activeShortcutLabel, isDesktop, loadPlatform, type AppActions, type AppState, type Platform } from './platform/platform';
 import { loadRooms, noteJoin, notePeers, roomTitle, saveRooms } from './room/rooms';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
@@ -376,6 +376,7 @@ async function join(secret: string): Promise<void> {
 }
 
 const BOOTED_KEY = 'plaudr.booted';
+const LINK_WAIT_MS = 1000;
 
 /** Liest und setzt die Sitzungsmarke: true, wenn diese Browsersitzung schon einmal geroutet hat. */
 function takeBooted(): boolean {
@@ -431,6 +432,7 @@ function boot(): void {
     peers: () => callPeers(),
     inCall: () => inCall,
     pttShortcut: () => platform?.pttShortcut ?? null,
+    autostart: () => platform?.autostart ?? null,
     back: () => {
       closeSettings();
       if (returnTo === 'call') {
@@ -461,7 +463,12 @@ function boot(): void {
   addEventListener('pagehide', closeTestCapture);
 
   let first = true;
+  // Zuletzt geroutetes Fragment: Setzt ein Startlink das Fragment, während der erste Aufruf noch auf ihn wartet,
+  // käme sonst dasselbe Fragment zweimal an, und der zweite Aufruf hielte den Beitritt für einen Raumwechsel.
+  let routedHash: string | null = null;
   const route = () => {
+    if (location.hash === routedHash) return;
+    routedHash = location.hash;
     // Fragment ändert sich bei offenen Einstellungen: Mikrofon freigeben, Sicherungskarte zurück in die Lobby.
     if (!$('settings').hidden) closeSettings();
     // Anderer Raum im Fragment während eines Gesprächs oder Beitritts: neu laden, pagehide verlässt das alte sauber.
@@ -489,7 +496,12 @@ function boot(): void {
     });
   };
   addEventListener('hashchange', route);
-  route();
+  // Desktop: Ein Startlink (plaudr://…) geht dem Auto-Beitritt vor; länger als LINK_WAIT_MS hält er nicht auf.
+  if (isDesktop()) {
+    void platformReady
+      .then((p) => Promise.race([p.linkReady, new Promise<void>((r) => setTimeout(r, LINK_WAIT_MS))]))
+      .then(route);
+  } else route();
 }
 
 boot();

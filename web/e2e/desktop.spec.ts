@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeContexts, expectMesh, join, newContext, open, peerCount, roomHash } from './helpers';
+import { BACKUP_PW, closeContexts, expectDirectCall, expectMesh, join, newContext, open, peerCount, roomHash } from './helpers';
 
 test.afterEach(closeContexts);
 
@@ -19,6 +19,18 @@ declare global {
       emit(event: string, payload?: unknown): void;
       calls: string[];
       exitCode: number | null;
+      /** Autostart beim System; autostartFails lässt enable, disable und is_enabled scheitern. */
+      autostart: boolean;
+      autostartFails: boolean;
+      /** Antwort des Speichern- bzw. Öffnen-Dialogs (null = abgebrochen) und die Optionen des letzten Aufrufs. */
+      savePath: string | null;
+      openPath: string | null;
+      dialogOptions: Record<string, unknown> | null;
+      /** Nachgebautes Dateisystem; written ist der zuletzt geschriebene Inhalt. */
+      files: Record<string, string>;
+      written: string | null;
+      /** Wie tauri-plugin-deep-link: Ein Link landet in getCurrent (bleibt über ein Neuladen) und als Ereignis. */
+      openUrl(urls: string[]): void;
     };
   }
 }
@@ -29,7 +41,7 @@ declare global {
  * Fenster und Beenden, die der Test bedient.
  * Im Browser ohne diese Attrappe bleibt alles beim Alten (Tests oben).
  */
-function fakeTauri(): void {
+function fakeTauri(opts?: { startLinks?: string[] }): void {
   const callbacks = new Map<number, (m: unknown) => void>();
   const handlers = new Map<string, { id: number; index: number }>();
   let next = 1;
@@ -72,8 +84,21 @@ function fakeTauri(): void {
     },
     calls: [],
     exitCode: null,
+    autostart: false,
+    autostartFails: false,
+    savePath: '/Users/anna/plaudr-Anna.plaudr-key',
+    openPath: null,
+    dialogOptions: null,
+    files: {},
+    written: null,
+    openUrl(urls) {
+      sessionStorage.setItem('fake.deepLink', JSON.stringify(urls));
+      app.emit('deep-link://new-url', urls);
+    },
   };
   window.fakeApp = app;
+  // getCurrent: der Startlink, nach einem weiteren Link dieser (das Plugin merkt sich den letzten im Prozess).
+  const currentLinks = () => JSON.parse(sessionStorage.getItem('fake.deepLink') ?? 'null') ?? opts?.startLinks ?? null;
   type Args = Record<string, unknown> & { shortcuts?: string[]; handler?: { id: number } };
   (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },
@@ -85,7 +110,7 @@ function fakeTauri(): void {
     unregisterCallback(id: number) {
       callbacks.delete(id);
     },
-    async invoke(cmd: string, args: Args) {
+    async invoke(cmd: string, args: Args, options?: { headers?: Record<string, string> }) {
       const [a] = args.shortcuts ?? [];
       if (cmd === 'plugin:global-shortcut|register') {
         if (fake.taken.includes(a) || handlers.has(a)) throw `HotKey already registered: ${a}`;
@@ -160,6 +185,33 @@ function fakeTauri(): void {
         case 'plugin:window|destroy':
           app.calls.push(cmd.slice('plugin:window|'.length));
           return null;
+        case 'plugin:deep-link|get_current':
+          return currentLinks();
+        case 'plugin:autostart|is_enabled':
+        case 'plugin:autostart|enable':
+        case 'plugin:autostart|disable':
+          app.calls.push(cmd.slice('plugin:'.length));
+          if (app.autostartFails) throw 'Autostart nicht möglich';
+          if (cmd !== 'plugin:autostart|is_enabled') app.autostart = cmd === 'plugin:autostart|enable';
+          return app.autostart;
+        case 'plugin:dialog|save':
+        case 'plugin:dialog|open':
+          app.calls.push(cmd.slice('plugin:'.length));
+          app.dialogOptions = args.options as Record<string, unknown>;
+          return cmd === 'plugin:dialog|save' ? app.savePath : app.openPath;
+        case 'plugin:fs|write_text_file': {
+          // Inhalt als Bytes im Rumpf, der Pfad im Kopf (wie @tauri-apps/plugin-fs ihn schickt).
+          const path = decodeURIComponent(options!.headers!.path);
+          app.files[path] = app.written = new TextDecoder().decode(args as unknown as Uint8Array);
+          app.calls.push('fs|write_text_file');
+          return null;
+        }
+        case 'plugin:fs|read_text_file': {
+          const text = app.files[args.path as string];
+          if (text === undefined) throw `Datei fehlt: ${args.path}`;
+          app.calls.push('fs|read_text_file');
+          return Array.from(new TextEncoder().encode(text));
+        }
         case 'plugin:process|exit':
           app.exitCode = args.code as number;
           app.calls.push('exit');
@@ -185,6 +237,7 @@ test('Browser: Leertaste als Hinweis, keine globale Taste', async ({ browser }) 
   await page.click('#start-settings');
   await expect(page.locator('#ptt-info')).toHaveText('Leertaste, solange plaudr im Vordergrund ist.');
   await expect(page.locator('#ptt-desktop')).toBeHidden();
+  await expect(page.locator('#autostart-row')).toBeHidden();
 });
 
 test('Desktop: Taste aufnehmen, ungültig, vergeben, entfernen', async ({ browser }) => {
@@ -419,3 +472,181 @@ for (const [wie, ausloesen] of [
     await expect.poll(() => peerCount(ben), { timeout: 3000 }).toBe(0);
   });
 }
+
+const hashOf = (p: Page) => p.evaluate(() => location.hash);
+const menuOf = (p: Page) => p.evaluate(() => window.fakeApp!.menu());
+
+test('Desktop: Startlink geht dem Auto-Beitritt vor, nach dem Verlassen kein zweites Mal', async ({ browser }) => {
+  const ctx = await newContext(browser);
+  // Erst ein Raum, damit der Auto-Beitritt ein Ziel hätte, mit Name und Sicherung.
+  const first = await ctx.newPage();
+  await first.addInitScript(fakeTauri);
+  await first.goto('/' + roomHash('desktopalt'));
+  await join(first, 'Anna');
+  await first.close();
+
+  const link = roomHash('desktopstartlink');
+  const page = await ctx.newPage();
+  await page.addInitScript(fakeTauri, { startLinks: [`plaudr://raum${link}`] });
+  await page.goto('/');
+  await expectDirectCall(page);
+  expect(await hashOf(page)).toBe(link);
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.calls)).toContain('show');
+
+  // getCurrent liefert den Startlink nach jedem Neuladen wieder; „Raum verlassen“ führt trotzdem zu den Räumen.
+  await page.evaluate(() => window.fakeApp!.click('Raum verlassen'));
+  await expect(page.locator('#start')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(page.locator('#start')).toBeVisible();
+  expect(await hashOf(page)).toBe('');
+});
+
+test('Desktop: Link im Gespräch verlässt den Raum sauber, betritt den neuen, kein zweites Tray', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri);
+  const hash = roomHash('desktoplinkalt');
+  await page.goto('/' + hash);
+  await join(page, 'Anna');
+  const ben = await open(browser, hash);
+  await join(ben, 'Ben');
+  await expectMesh([page, ben], 1);
+  const selfId = await page.evaluate(() => window.plaudr!.selfId);
+
+  const next = roomHash('desktoplinkneu');
+  await page.evaluate((u) => window.fakeApp!.openUrl([u]), `plaudr://${next.slice(1)}/`);
+  // Ben sieht Anna sofort gehen (Verlassen vor dem Neuladen), nicht erst nach der Gnadenfrist.
+  await expect.poll(() => peerCount(ben), { timeout: 3000 }).toBe(0);
+  await expectDirectCall(page);
+  expect(await hashOf(page)).toBe(next);
+  // Dieselbe Identität im neuen Raum, ein einziges Tray-Symbol, dessen Menü dem neuen Gespräch folgt.
+  expect(await page.evaluate(() => window.plaudr!.selfId)).toBe(selfId);
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.trays)).toBe(1);
+  const title = await page.locator('#room-title').textContent();
+  await expect.poll(() => menuOf(page)).toContain(`(${title} · 1 im Raum)`);
+
+  // Derselbe Link noch einmal: Fenster nach vorn, das Gespräch bleibt.
+  await page.evaluate((u) => window.fakeApp!.openUrl([u]), `plaudr://raum${next}`);
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.calls.filter((c) => c === 'show').length)).toBe(1);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.plaudr!.selfId)).toBe(selfId);
+  await expect(page.locator('#call')).toBeVisible();
+
+  // Beenden aus dem Tray wirkt auch nach dem Neuladen.
+  await page.evaluate(() => window.fakeApp!.click('plaudr beenden'));
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.exitCode)).toBe(0);
+});
+
+for (const url of ['plaudr://quit', 'plaudr://raum', 'https://example.com/#' + 'A'.repeat(43)]) {
+  test(`Desktop: ungültiger Link ${url} zeigt nur einen Hinweis`, async ({ browser }) => {
+    const page = await (await newContext(browser)).newPage();
+    await page.addInitScript(fakeTauri);
+    await page.goto('/');
+    await expect(page.locator('#start')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.fakeApp!.trays)).toBe(1);
+    await page.evaluate((u) => window.fakeApp!.openUrl([u]), url);
+    await expect(page.locator('.link-notice')).toHaveText('Das ist kein plaudr-Link.');
+    await expect.poll(() => page.evaluate(() => window.fakeApp!.calls)).toContain('show');
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => window.fakeApp!.exitCode)).toBeNull();
+    await expect(page.locator('#start')).toBeVisible();
+    expect(await hashOf(page)).toBe('');
+  });
+}
+
+test('Desktop: Beim Anmelden starten folgt dem System, Fehler als Hinweis', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri);
+  await desktopSettings(page);
+  const box = page.locator('#autostart');
+  await expect(page.locator('#autostart-row')).toHaveText('Beim Anmelden starten (im Tray)');
+  await expect(box).toBeEnabled();
+  await expect(box).not.toBeChecked();
+
+  await box.check();
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.autostart)).toBe(true);
+  await expect(page.locator('#autostart-error')).toBeHidden();
+
+  // Der Zustand kommt vom System, nicht aus dem eigenen Speicher.
+  await page.click('#settings-back');
+  await page.evaluate(() => (window.fakeApp!.autostart = false));
+  await page.click('#start-settings');
+  await expect(box).not.toBeChecked();
+  await page.evaluate(() => (window.fakeApp!.autostart = true));
+  await page.click('#settings-back');
+  await page.click('#start-settings');
+  await expect(box).toBeChecked();
+
+  // Scheitert das Ausschalten, bleibt der Haken und ein Hinweis erscheint.
+  await page.evaluate(() => (window.fakeApp!.autostartFails = true));
+  await box.click();
+  await expect(page.locator('#autostart-error')).toHaveText('Das System hat den Start beim Anmelden nicht übernommen.');
+  await expect(box).toBeChecked();
+  expect(await page.evaluate(() => window.fakeApp!.autostart)).toBe(true);
+
+  await page.click('#settings-back');
+  await page.click('#start-settings');
+  await expect(page.locator('#autostart-error')).toHaveText('Ob plaudr beim Anmelden startet, ließ sich nicht abfragen.');
+});
+
+test('Desktop: Sicherung über native Dialoge speichern und laden', async ({ browser }) => {
+  const h = roomHash('desktopsicherung');
+  const a = await (await newContext(browser)).newPage();
+  await a.addInitScript(fakeTauri);
+  await a.goto('/' + h);
+  await expect(a.locator('#backup')).toBeVisible();
+  await a.fill('#backup-pw', BACKUP_PW);
+  await a.fill('#backup-pw2', BACKUP_PW);
+
+  // Abgebrochener Dialog: nichts geschrieben, Sicherung weiter ausstehend.
+  await a.evaluate(() => (window.fakeApp!.savePath = null));
+  await a.click('#backup-save');
+  await expect.poll(() => a.evaluate(() => window.fakeApp!.calls)).toContain('dialog|save');
+  await expect(a.locator('#backup-save')).toBeEnabled();
+  await expect(a.locator('#backup')).toBeVisible();
+  expect(await a.evaluate(() => window.fakeApp!.written)).toBeNull();
+
+  await a.evaluate(() => (window.fakeApp!.savePath = '/Users/anna/Sicherungen/anna.plaudr-key'));
+  await a.click('#backup-save');
+  await expect(a.locator('#backup')).toBeHidden();
+  const opts = await a.evaluate(() => window.fakeApp!.dialogOptions);
+  expect(opts).toEqual({ defaultPath: expect.stringMatching(/^plaudr-.+\.plaudr-key$/), filters: [{ name: 'plaudr-Sicherung', extensions: ['plaudr-key'] }] });
+  const file = await a.evaluate(() => window.fakeApp!.files['/Users/anna/Sicherungen/anna.plaudr-key']);
+  expect(JSON.parse(file)).toBeTruthy();
+  await join(a, 'Anna');
+  const id = await a.evaluate(() => window.plaudr!.selfId);
+  await a.click('#leave');
+  await expect(a.locator('#start')).toBeVisible();
+
+  // Zweiter Rechner: Dateifeld versteckt, „Datei wählen“ mit Dateiname daneben.
+  const b = await (await newContext(browser)).newPage();
+  await b.addInitScript(fakeTauri);
+  await b.goto('/' + h);
+  await expect(b.locator('#backup')).toBeVisible();
+  await b.locator('#restore summary').click();
+  await expect(b.locator('#restore-file')).toBeHidden();
+  await expect(b.locator('#restore-pick')).toHaveText('Datei wählen');
+  await expect(b.locator('#restore-file-name')).toHaveText('Keine Datei gewählt');
+  await b.fill('#restore-pw', BACKUP_PW);
+  await b.click('#restore-load');
+  await expect(b.locator('#restore-error')).toHaveText('Wähle zuerst die Sicherungsdatei.');
+
+  // Abgebrochen: keine Datei; dann die Sicherung von a.
+  await b.click('#restore-pick');
+  await expect.poll(() => b.evaluate(() => window.fakeApp!.calls)).toContain('dialog|open');
+  await expect(b.locator('#restore-file-name')).toHaveText('Keine Datei gewählt');
+  await b.evaluate((text) => {
+    window.fakeApp!.files['C:\\Users\\anna\\anna.plaudr-key'] = text;
+    window.fakeApp!.openPath = 'C:\\Users\\anna\\anna.plaudr-key';
+  }, file);
+  await b.click('#restore-pick');
+  await expect(b.locator('#restore-file-name')).toHaveText('anna.plaudr-key');
+  expect(await b.evaluate(() => window.fakeApp!.dialogOptions)).toEqual({
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'plaudr-Sicherung', extensions: ['plaudr-key'] }],
+  });
+  await b.click('#restore-load');
+  await expect(b.locator('#backup')).toBeHidden();
+  await join(b, 'Anna');
+  expect(await b.evaluate(() => window.plaudr!.selfId)).toBe(id);
+});

@@ -3,7 +3,7 @@ import { listMics, micChoices } from '../audio/devices';
 import type { AudioSettings } from '../audio/settings';
 import type { Identity } from '../crypto/identity';
 import type { PeerView } from '../mesh/mesh';
-import type { PttShortcut } from '../platform/platform';
+import type { Autostart, PttShortcut } from '../platform/platform';
 import { recordKey } from '../platform/shortcut';
 import { fingerprintWords } from '../crypto/words';
 import { mountBackupPanel, showBackupState } from './backup-panel';
@@ -32,6 +32,8 @@ export interface SettingsOptions {
   inCall(): boolean;
   /** Globale Push-to-Talk-Taste; null im Browser. */
   pttShortcut(): PttShortcut | null;
+  /** Beim Anmelden starten; null im Browser. */
+  autostart(): Autostart | null;
   back(): void;
 }
 
@@ -74,6 +76,8 @@ export function previewColors(hue: number | null): { light: PreviewColors; dark:
 
 export const PTT_INVALID = 'Nimm eine Taste mit ⌥, ⌘, Strg oder Umschalt, oder F13 bis F24.';
 export const PTT_TAKEN = 'Diese Taste ist schon vergeben. Nimm eine andere.';
+export const AUTOSTART_READ_FAILED = 'Ob plaudr beim Anmelden startet, ließ sich nicht abfragen.';
+export const AUTOSTART_SET_FAILED = 'Das System hat den Start beim Anmelden nicht übernommen.';
 
 const pct = (t: number) => `${Math.round(t * 100)} %`;
 const THEMES: UiPrefs['theme'][] = ['system', 'light', 'dark'];
@@ -227,7 +231,9 @@ export function initSettings(o: SettingsOptions): SettingsView {
     done.hidden = true;
     backup.hidden = false;
     restore.open = what === 'restore';
-    $<HTMLInputElement>(what === 'backup' ? 'backup-pw' : 'restore-file').focus();
+    // Auf dem Desktop ist das Dateifeld versteckt, dort wählt „Datei wählen“ über den nativen Dialog.
+    const file = $<HTMLInputElement>('restore-file').hidden ? 'restore-pick' : 'restore-file';
+    $(what === 'backup' ? 'backup-pw' : file).focus();
   };
   $('settings-backup').onclick = () => openPanel('backup');
   $('settings-restore').onclick = () => openPanel('restore');
@@ -319,6 +325,52 @@ export function initSettings(o: SettingsOptions): SettingsView {
     if (k) void choose(k, null);
   };
 
+  // Start: auf dem Desktop zusätzlich „Beim Anmelden starten (im Tray)“, Zustand vom System.
+  const autoBox = $<HTMLInputElement>('autostart');
+  const autoError = $('autostart-error');
+  const showAutoError = (text: string | null) => {
+    autoError.textContent = text ?? '';
+    autoError.hidden = !text;
+  };
+  let autoToken = 0;
+  const renderAutostart = () => {
+    const a = o.autostart();
+    $('autostart-row').hidden = !a;
+    if (!a) return;
+    const token = ++autoToken;
+    autoBox.disabled = true;
+    showAutoError(null);
+    a.isEnabled()
+      .then((on) => {
+        if (token === autoToken) autoBox.checked = on;
+      })
+      .catch((err) => {
+        console.warn('[plaudr] Autostart nicht abfragbar', err);
+        if (token === autoToken) showAutoError(AUTOSTART_READ_FAILED);
+      })
+      .finally(() => {
+        if (token === autoToken) autoBox.disabled = false;
+      });
+  };
+  autoBox.onchange = () => {
+    const a = o.autostart();
+    if (!a) return;
+    const on = autoBox.checked;
+    const token = ++autoToken;
+    autoBox.disabled = true;
+    showAutoError(null);
+    a.set(on)
+      .catch((err) => {
+        console.warn('[plaudr] Autostart nicht änderbar', err);
+        if (token !== autoToken) return;
+        autoBox.checked = !on;
+        showAutoError(AUTOSTART_SET_FAILED);
+      })
+      .finally(() => {
+        if (token === autoToken) autoBox.disabled = false;
+      });
+  };
+
   $('settings-back').onclick = () => o.back();
 
   return {
@@ -329,6 +381,7 @@ export function initSettings(o: SettingsOptions): SettingsView {
       renderPeerWords();
       showKeyError(null);
       renderPtt();
+      renderAutostart();
       // Beim Start von einem anderen Programm belegt: Die Taste bleibt gespeichert, wirkt aber nicht.
       const k = o.pttShortcut();
       void k?.ready.then(() => {

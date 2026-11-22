@@ -75,4 +75,28 @@ bekommt. Gegenstelle für 26 bis 29: ein Browser-Tab im selben Raum (die Gnadenf
 | 32 | Windows | wie 24 bis 27 (Schließen mit X oder Alt+F4) | wie 24 bis 27 | |
 | 33 | Windows | Im Gespräch abmelden oder herunterfahren | im Browser-Tab verschwindest du sofort (bestmöglich, wie 29) | |
 
+## Deep-Links, Einzelinstanz, Autostart, Dialoge (nach Task 5)
+
+Per E2E mit nachgebautem Tauri geprüft: Startlink vor dem Auto-Beitritt, Link im Gespräch (Gegenüber sieht
+dich sofort gehen, dieselbe Identität, ein Tray-Symbol), ungültige Links samt `plaudr://quit`, Autostart-
+Schalter mit Fehlern, Speichern und Laden über die Dialoge. An der echten macOS-App beim Bau schon
+nachgesehen: 34, 35 (ohne Gespräch), 36, 37, 39 und das Ein- und Ausschalten in 40 (LaunchAgent
+`~/Library/LaunchAgents/plaudr.plist` mit `--hidden` erscheint und verschwindet). Offen ist der Rest.
+Ein gültiges Geheimnis: im Browser einen Raum erstellen und den Teil nach `#` nehmen.
+
+| # | Plattform | Prüfung | Erwartung | Ergebnis |
+|---|---|---|---|---|
+| 34 | macOS | App beendet, im Terminal `open 'plaudr://raum#<Geheimnis>'` | App startet, Fenster zeigt diesen Raum (Lobby oder direkt das Gespräch), kein Auto-Beitritt in den letzten Raum | |
+| 35 | macOS | App läuft im Gespräch mit einem Browser-Tab, Fenster im Tray; `open 'plaudr://<anderes Geheimnis>/'` | Fenster kommt nach vorn, im Browser-Tab verschwindest du sofort, die App ist im neuen Raum mit denselben 4 Wörtern; ein einziges Tray-Symbol, „Raum verlassen“ und „plaudr beenden“ wirken danach | |
+| 36 | macOS | `open 'plaudr://quit'` und `open 'plaudr://raum'` bei laufender App | App bleibt, Hinweis „Das ist kein plaudr-Link.“ unten im Fenster | |
+| 37 | macOS | App läuft, das Programm im Bündel noch einmal starten (`plaudr.app/Contents/MacOS/plaudr`) | zweiter Prozess endet sofort, das vorhandene Fenster kommt nach vorn; mit `--hidden` bleibt es im Tray | |
+| 38 | macOS | Einladungslink `https://plaudr.room.ws/#…` in Safari anklicken | öffnet die Web-App (das Schema https bleibt beim Browser); Einfügen des Links in „Deine Räume“ der App führt in den Raum | |
+| 39 | macOS | `open -a plaudr.app --args --hidden` | kein Fenster, Tray-Symbol da; war „Zuletzt genutzten Raum automatisch betreten“ an, ist die App im letzten Raum (Gegenüber sieht dich) | |
+| 40 | macOS | Einstellungen › Start › „Beim Anmelden starten (im Tray)“ an, abmelden, anmelden | plaudr startet ohne Fenster im Tray, Auto-Beitritt wie in 39; Haken nach dem Öffnen der Einstellungen gesetzt; aus: startet nicht mehr | |
+| 41 | macOS | Schlüssel sichern: Speichern-Dialog, Vorschlag `plaudr-<Name>.plaudr-key`; einmal abbrechen, einmal speichern | Abbrechen lässt die Sicherung ausstehend; gespeicherte Datei liegt am gewählten Ort | |
+| 42 | macOS | Sicherung laden: „Datei wählen“ (Dateifeld fehlt), Datei aus 41 wählen, Passwort, „Sicherung laden“ | Öffnen-Dialog zeigt nur `.plaudr-key`, der Dateiname steht neben dem Knopf, danach „Sicherung geladen.“ und die 4 Wörter der Sicherung | |
+| 43 | Windows | App läuft (auch im Tray); in Explorer oder Win+R `plaudr://raum#<Geheimnis>` | kein zweites Fenster, kein zweites Tray-Symbol; die laufende App kommt nach vorn und betritt den Raum (Link kommt über die zweite Instanz an) | |
+| 44 | Windows | App beendet, wie 43 | App startet und betritt den Raum | |
+| 45 | Windows | wie 36, 37 (zweiter Start von `plaudr.exe`), 39 bis 42 (Autostart über den Registry-Eintrag `HKCU\…\Run`) | wie dort | |
+
 Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.

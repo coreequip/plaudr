@@ -44,6 +44,13 @@ export const BACKUP_PW = 'geheim-123';
 export async function backup(page: Page, pw = BACKUP_PW): Promise<string> {
   await page.fill('#backup-pw', pw);
   await page.fill('#backup-pw2', pw);
+  // Nachgebauter Desktop-Client (desktop.spec.ts): Speichern-Dialog und Datei statt Download.
+  type FakeFiles = { fakeApp?: { written: string | null } };
+  if (await page.evaluate(() => 'fakeApp' in window)) {
+    await page.click('#backup-save');
+    await expect(page.locator('#backup')).toBeHidden();
+    return page.evaluate(() => (window as unknown as FakeFiles).fakeApp!.written ?? '');
+  }
   const [download] = await Promise.all([page.waitForEvent('download'), page.click('#backup-save')]);
   await expect(page.locator('#backup')).toBeHidden();
   const stream = await download.createReadStream();

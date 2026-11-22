@@ -31,8 +31,32 @@ export function initBackupPanel(o: BackupPanelOptions): void {
     at.hidden = false;
   };
   const busy = (on: boolean) => {
-    for (const id of ['backup-save', 'restore-load']) $<HTMLButtonElement>(id).disabled = on;
+    for (const id of ['backup-save', 'restore-load', 'restore-pick']) $<HTMLButtonElement>(id).disabled = on;
   };
+
+  // Desktop: statt des Dateifelds der native Öffnen-Dialog, die gewählte Datei steht mit Namen daneben.
+  const input = $<HTMLInputElement>('restore-file');
+  const pickedName = $('restore-file-name');
+  let picked: { name: string; text: string } | null = null;
+  if (o.platform.kind === 'desktop') {
+    input.hidden = true;
+    $('restore-pick-row').hidden = false;
+    $('restore-pick').onclick = async () => {
+      busy(true);
+      try {
+        const f = await o.platform.openText(['.plaudr-key']);
+        if (!f) return;
+        picked = f;
+        pickedName.textContent = f.name;
+        clear();
+      } catch (err) {
+        console.warn('[plaudr] Datei nicht lesbar', err);
+        fail('Die Datei ließ sich nicht lesen.', restoreError);
+      } finally {
+        busy(false);
+      }
+    };
+  }
 
   const persist = async (id: Identity): Promise<Identity> => {
     try {
@@ -47,6 +71,8 @@ export function initBackupPanel(o: BackupPanelOptions): void {
   const done = (id: Identity) => {
     o.setIdentity(id);
     for (const f of ['backup-pw', 'backup-pw2', 'restore-pw']) $<HTMLInputElement>(f).value = '';
+    picked = null;
+    pickedName.textContent = 'Keine Datei gewählt';
     clear();
     panel.hidden = true;
   };
@@ -74,15 +100,13 @@ export function initBackupPanel(o: BackupPanelOptions): void {
   };
 
   $('restore-load').onclick = async () => {
-    // Im Browser steht das Dateifeld sichtbar da; ist es versteckt (Desktop), wählt die Plattform die Datei.
-    const input = $<HTMLInputElement>('restore-file');
+    // Im Browser steht das Dateifeld sichtbar da; ist es versteckt (Desktop), gilt die über „Datei wählen“ gewählte.
     busy(true);
     try {
       let text: string;
       if (input.hidden) {
-        const f = await o.platform.openText(['.plaudr-key']);
-        if (!f) return;
-        text = f.text;
+        if (!picked) return fail('Wähle zuerst die Sicherungsdatei.', restoreError);
+        text = picked.text;
       } else {
         const file = input.files?.[0];
         if (!file) return fail('Wähle zuerst die Sicherungsdatei.', restoreError);

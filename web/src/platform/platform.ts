@@ -33,6 +33,12 @@ export interface PttShortcut {
   readonly ready: Promise<void>;
 }
 
+/** Beim Anmelden starten (im Tray), nur Desktop. */
+export interface Autostart {
+  isEnabled(): Promise<boolean>;
+  set(on: boolean): Promise<void>;
+}
+
 export interface Platform {
   readonly kind: 'web' | 'desktop';
   readonly os: 'mac' | 'windows' | 'other';
@@ -43,6 +49,14 @@ export interface Platform {
   update(s: AppState): void;
   /** Nur im Desktop-Client. */
   readonly pttShortcut?: PttShortcut;
+  /** Nur im Desktop-Client. */
+  readonly autostart?: Autostart;
+  /**
+   * Nur im Desktop-Client: erfüllt, sobald ein Link, mit dem die App gestartet wurde, übernommen ist (das
+   * Fragment steht dann schon). Lehnt nie ab. Der erste Seitenaufbau wartet darauf, damit der Link vor dem
+   * Auto-Beitritt in den letzten Raum gilt.
+   */
+  readonly linkReady?: Promise<void>;
 }
 
 /** Bezeichnung der wirksamen globalen Taste für den Hinweis am PTT-Knopf; null ohne (oder ohne wirksame) Taste. */

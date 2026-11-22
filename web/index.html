@@ -69,6 +69,10 @@
           <details id="restore">
             <summary>Schon eine Sicherung? Hier laden</summary>
             <input id="restore-file" type="file" accept=".plaudr-key,application/json" aria-label="Sicherungsdatei" />
+            <div id="restore-pick-row" class="row restore-pick" hidden>
+              <button id="restore-pick" class="outline tall" type="button">Datei wählen</button>
+              <span id="restore-file-name" class="restore-file-name">Keine Datei gewählt</span>
+            </div>
             <div class="field">
               <label for="restore-pw">Passwort der Sicherung</label>
               <input id="restore-pw" class="tall" type="password" autocomplete="current-password" aria-describedby="restore-error" />
@@ -224,6 +228,8 @@
           <section class="set-card" aria-labelledby="set-start">
             <span id="set-start" class="section-label">START</span>
             <label class="check set-check"><input id="auto-join" type="checkbox" /> Zuletzt genutzten Raum automatisch betreten</label>
+            <label id="autostart-row" class="check set-check" hidden><input id="autostart" type="checkbox" aria-describedby="autostart-error" /> Beim Anmelden starten (im Tray)</label>
+            <span id="autostart-error" class="field-error" role="alert" hidden></span>
           </section>
         </div>
         <footer class="foot settings-foot">

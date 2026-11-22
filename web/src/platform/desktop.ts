@@ -2,6 +2,10 @@ import { listen } from '@tauri-apps/api/event';
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem } from '@tauri-apps/api/menu';
 import { TrayIcon } from '@tauri-apps/api/tray';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { disable as disableAutostart, enable as enableAutostart, isEnabled as autostartEnabled } from '@tauri-apps/plugin-autostart';
+import { getCurrent as currentLinks, onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
 import { exit } from '@tauri-apps/plugin-process';
 import macIdlePng from '../../../desktop/src-tauri/icons/tray-mac@2x.png?inline';
@@ -9,8 +13,10 @@ import macSendingPng from '../../../desktop/src-tauri/icons/tray-mac-sending@2x.
 import winIdlePng from '../../../desktop/src-tauri/icons/tray-win.png?inline';
 import winSendingPng from '../../../desktop/src-tauri/icons/tray-win-sending.png?inline';
 import type { SpeakMode } from '../audio/gate';
+import { secretFromHash } from '../room/link';
+import { secretFromDeepLink } from './deep-link';
 import { createPttShortcut, loadDesktopPrefs, saveDesktopPrefs } from './desktop-prefs';
-import { activeShortcutLabel, detectOs, type AppActions, type AppState, type Platform } from './platform';
+import { activeShortcutLabel, detectOs, type AppActions, type AppState, type Autostart, type Platform } from './platform';
 import { GlobalPtt, type ShortcutApi } from './shortcut';
 import { trayModel, type TrayItemId, type TrayModel } from './tray-model';
 import { webPlatform } from './web';
@@ -32,6 +38,21 @@ const LEAVE_TIMEOUT_MS = 1000;
 /** So lange bleibt das Fenster beim ersten Schließen mit dem Hinweis offen. */
 const NOTICE_MS = 2000;
 const TRAY_ID = 'plaudr';
+/** So lange steht der Hinweis zu einem ungültigen Link im Fenster. */
+const LINK_NOTICE_MS = 4000;
+/** sessionStorage: zuletzt übernommene Links. getCurrent liefert sie nach jedem Neuladen der Seite wieder. */
+const HANDLED_LINKS_KEY = 'plaudr.deepLink';
+export const INVALID_LINK = 'Das ist kein plaudr-Link.';
+const BACKUP_FILTER = 'plaudr-Sicherung';
+
+/** Autostart über tauri-plugin-autostart; lib.rs startet ihn mit --hidden (im Tray). */
+const autostart: Autostart = {
+  isEnabled: () => autostartEnabled(),
+  set: (on) => (on ? enableAutostart() : disableAutostart()),
+};
+
+/** Dateiname am Ende eines Pfads (macOS „/“, Windows „\\“). */
+const baseName = (path: string) => path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
 
 const OUT_OF_CALL: AppState = { inCall: false, roomTitle: null, peerCount: 0, mode: 'ptt', sending: false, hasMic: false };
 
@@ -41,7 +62,10 @@ function pngBytes(dataUrl: string): number[] {
   return Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-/** Desktop-Client: globale Push-to-Talk-Taste, Tray, Fenster schließen in den Tray; Dateien vorerst wie im Browser (Task 5). */
+/**
+ * Desktop-Client: globale Push-to-Talk-Taste, Tray, Fenster schließen in den Tray, plaudr://-Links,
+ * Autostart und die Sicherungsdatei über native Dialoge.
+ */
 export function desktopPlatform(actions: AppActions): Platform {
   const web = webPlatform();
   const os = detectOs();
@@ -131,11 +155,74 @@ export function desktopPlatform(actions: AppActions): Platform {
   });
   pttShortcut.onChange(() => tray.refresh());
 
+  // Deep-Links (Spec §8, Link-Übernahme). Eine zweite Instanz gibt ihren Link über lib.rs an diese weiter,
+  // er kommt also immer hier an. Gültig: Fenster nach vorn und in den Raum; ein laufendes Gespräch wird erst
+  // verlassen, der Fragmentwechsel lädt dann neu (main.ts). Ungültig, auch plaudr://quit: nur ein Hinweis.
+  let linkNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  const linkNotice = () => {
+    document.querySelector('.link-notice')?.remove();
+    if (linkNoticeTimer) clearTimeout(linkNoticeTimer);
+    const n = document.createElement('div');
+    n.className = 'link-notice';
+    n.setAttribute('role', 'status');
+    n.textContent = INVALID_LINK;
+    document.body.append(n);
+    linkNoticeTimer = setTimeout(() => n.remove(), LINK_NOTICE_MS);
+  };
+  const markHandled = (key: string) => {
+    try {
+      sessionStorage.setItem(HANDLED_LINKS_KEY, key);
+    } catch {
+      /* ohne sessionStorage: nach einem Neuladen käme der Startlink noch einmal, er führt in denselben Raum */
+    }
+  };
+  const wasHandled = (key: string) => {
+    try {
+      return sessionStorage.getItem(HANDLED_LINKS_KEY) === key;
+    } catch {
+      return false;
+    }
+  };
+  // Nacheinander, damit zwei schnelle Links nicht beide ein Verlassen anstoßen; der letzte gewinnt.
+  let linkQueue: Promise<void> = Promise.resolve();
+  const openLinks = (urls: string[]) =>
+    (linkQueue = linkQueue.then(async () => {
+      markHandled(JSON.stringify(urls));
+      const secret = urls.map(secretFromDeepLink).find((x) => x !== null) ?? null;
+      showWindow();
+      if (!secret) return linkNotice();
+      if (secretFromHash(location.hash) === secret) return;
+      if (state?.inCall) await leaveAtMost();
+      location.hash = secret;
+    }));
+  void onOpenUrl((urls) => void openLinks(urls)).catch((err) => console.warn('[plaudr] Deep-Links nicht verfügbar', err));
+  // Link vom Start der App (macOS: Apple-Ereignis, Windows: Argument). Nach einem Neuladen derselbe wie zuvor:
+  // dann nicht noch einmal, sonst führte etwa „Verlassen“ gleich wieder in den Raum.
+  const linkReady = currentLinks()
+    .then((urls) => {
+      if (urls?.length && !wasHandled(JSON.stringify(urls))) return openLinks(urls);
+    })
+    .catch((err) => console.warn('[plaudr] Startlink nicht lesbar', err));
+
   return {
     ...web,
     kind: 'desktop',
     os,
     pttShortcut,
+    autostart,
+    linkReady,
+    async saveText(fileName, text) {
+      const path = await saveDialog({ defaultPath: fileName, filters: [{ name: BACKUP_FILTER, extensions: ['plaudr-key'] }] });
+      if (!path) return false;
+      await writeTextFile(path, text);
+      return true;
+    },
+    async openText(accept) {
+      const extensions = accept.map((a) => a.replace(/^\./, ''));
+      const path = await openDialog({ multiple: false, directory: false, filters: [{ name: BACKUP_FILTER, extensions }] });
+      if (typeof path !== 'string') return null;
+      return { name: baseName(path), text: await readTextFile(path) };
+    },
     update(s) {
       state = s;
       // Moduswechsel oder Gespräch verlassen: Die Taste darf nicht „gedrückt“ hängen bleiben.

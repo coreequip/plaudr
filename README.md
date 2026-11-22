@@ -49,6 +49,10 @@ Für npm entsprechend `npm install --save-exact --before=2026-11-08 paket@x.y.z`
 Die Tray-Symbole (`desktop/src-tauri/icons/tray-*.png`) erzeugt `desktop/scripts/tray-icons.sh` aus dem
 App-Symbol neu (braucht `rsvg-convert`).
 
+Links `plaudr://raum#<Geheimnis>` öffnen die App. macOS kennt das Schema, sobald das `.app`-Bündel einmal
+gestartet (oder mit `lsregister -f` eingetragen) wurde; unter Windows trägt die App es bei jedem Start
+für den Benutzer ein. Ein zweiter Start reicht Link und Argumente an die laufende App weiter.
+
 Prüfpunkte von Hand: [docs/m4-handprobe.md](docs/m4-handprobe.md).
 
 ## Lizenz
