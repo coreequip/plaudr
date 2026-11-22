@@ -1,5 +1,6 @@
 import workletUrl from './capture.worklet.ts?worker&url';
 import type { CaptureActivity, CaptureControl } from './messages';
+import { resumeWithin } from './resume';
 import { RNNOISE_WASM_URL } from './rnnoise-url';
 import type { AudioSettings } from './settings';
 
@@ -10,6 +11,10 @@ export interface Capture {
   readonly processed: boolean;
   /** Das Worklet ist im Gespräch ausgefallen; ab jetzt geht das Rohmikrofon raus (gleicher Track). */
   onFallback(cb: () => void): void;
+  /** Der Kontext läuft noch nicht (kein Klick bisher): bis resume() geht Stille raus. */
+  needsGesture(): boolean;
+  /** Im Klick-Handler aufrufen, um den Kontext zu starten. */
+  resume(): Promise<void>;
   update(s: Partial<AudioSettings>): Promise<void>;
   setPressed(b: boolean): void;
   onActivity(cb: (a: CaptureActivity) => void): void;
@@ -17,13 +22,19 @@ export interface Capture {
   close(): void;
 }
 
-const constraints = (noiseSuppression: boolean): MediaStreamConstraints => ({
-  audio: { echoCancellation: true, noiseSuppression, autoGainControl: true, channelCount: 1 },
+const constraints = (noiseSuppression: boolean, deviceId: string | null): MediaStreamConstraints => ({
+  audio: {
+    echoCancellation: true,
+    noiseSuppression,
+    autoGainControl: true,
+    channelCount: 1,
+    ...(deviceId ? { deviceId: { ideal: deviceId } } : {}),
+  },
 });
 
-async function openMic(noiseSuppression: boolean): Promise<MediaStream | null> {
+async function openMic(noiseSuppression: boolean, deviceId: string | null): Promise<MediaStream | null> {
   try {
-    return await navigator.mediaDevices.getUserMedia(constraints(noiseSuppression));
+    return await navigator.mediaDevices.getUserMedia(constraints(noiseSuppression, deviceId));
   } catch {
     return null;
   }
@@ -49,14 +60,14 @@ const toControl = (s: Partial<AudioSettings>): CaptureControl => {
  */
 export async function openCapture(initial: AudioSettings): Promise<Capture | null> {
   let settings = { ...initial };
-  const mic = await openMic(!settings.denoise);
+  const mic = await openMic(!settings.denoise, settings.deviceId);
   if (!mic) return null;
   try {
     return await processedCapture(mic, settings);
   } catch (err) {
     console.warn('[plaudr] Audiokette nicht verfügbar, sende Rohmikrofon', err);
     mic.getTracks().forEach((t) => t.stop());
-    const raw = (await openMic(true)) ?? (await openMic(false));
+    const raw = (await openMic(true, settings.deviceId)) ?? (await openMic(false, settings.deviceId));
     if (!raw) return null;
     return rawCapture(raw, settings);
   }
@@ -78,8 +89,8 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
       let micStream = firstMic;
       let source = ctx.createMediaStreamSource(micStream);
       source.connect(node);
-      // Ohne Nutzergeste bleibt der Kontext sonst „suspended“ und es geht Stille raus.
-      await ctx.resume();
+      // Ohne Nutzergeste bleibt der Kontext „suspended“ (resume löst dann nie auf): nicht warten, needsGesture meldet es.
+      await resumeWithin(ctx, 300);
 
       let last: CaptureActivity = { open: false, vad: 0 };
       let pressed = false;
@@ -118,13 +129,15 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
         stream: dest.stream,
         processed: true,
         async update(p: Partial<AudioSettings>) {
-          const denoiseChanged = p.denoise !== undefined && p.denoise !== settings.denoise;
+          const sourceChanged =
+            (p.denoise !== undefined && p.denoise !== settings.denoise) ||
+            (p.deviceId !== undefined && p.deviceId !== settings.deviceId);
           settings = { ...settings, ...p };
           node.port.postMessage(toControl(p));
           applyGain();
-          if (!denoiseChanged) return;
-          // Browser-Rauschunterdrückung lässt sich nur beim Öffnen setzen; nur die Quelle tauschen, der Track bleibt.
-          const next = await openMic(!settings.denoise);
+          if (!sourceChanged) return;
+          // Rauschunterdrückung und Gerät lassen sich nur beim Öffnen setzen; nur die Quelle tauschen, der Track bleibt.
+          const next = await openMic(!settings.denoise, settings.deviceId);
           if (!next) return;
           source.disconnect();
           micStream.getTracks().forEach((t) => t.stop());
@@ -132,6 +145,8 @@ export async function openCapture(initial: AudioSettings): Promise<Capture | nul
           source = ctx.createMediaStreamSource(micStream);
           source.connect(target());
         },
+        needsGesture: () => ctx.state !== 'running',
+        resume: () => ctx.resume(),
         setPressed(b: boolean) {
           pressed = b;
           node.port.postMessage({ pressed: b } satisfies CaptureControl);
@@ -176,6 +191,8 @@ function rawCapture(mic: MediaStream, initial: AudioSettings): Capture {
     },
     onActivity: (cb) => void cbs.push(cb),
     onFallback: () => {},
+    needsGesture: () => false,
+    resume: async () => {},
     activity: () => ({ open: track.enabled, vad: 0 }),
     close: () => mic.getTracks().forEach((t) => t.stop()),
   };

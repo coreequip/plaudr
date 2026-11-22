@@ -14,14 +14,14 @@ function memoryStorage(init: Record<string, string> = {}): Storage {
 }
 
 test('Standardwerte', () => {
-  expect(DEFAULT_AUDIO).toEqual({ mode: 'vad', threshold: 0.85, denoise: true, preroll: true });
+  expect(DEFAULT_AUDIO).toEqual({ mode: 'vad', threshold: 0.85, denoise: true, preroll: true, deviceId: null });
   expect(loadAudioSettings(memoryStorage())).toEqual(DEFAULT_AUDIO);
 });
 
 test('gespeicherte Werte kommen zurück', () => {
   const st = memoryStorage();
-  saveAudioSettings({ mode: 'ptt', threshold: 0.7, denoise: false, preroll: false }, st);
-  expect(loadAudioSettings(st)).toEqual({ mode: 'ptt', threshold: 0.7, denoise: false, preroll: false });
+  saveAudioSettings({ mode: 'ptt', threshold: 0.7, denoise: false, preroll: false, deviceId: null }, st);
+  expect(loadAudioSettings(st)).toEqual({ mode: 'ptt', threshold: 0.7, denoise: false, preroll: false, deviceId: null });
 });
 
 test('kaputtes JSON ergibt Standard', () => {
@@ -30,7 +30,7 @@ test('kaputtes JSON ergibt Standard', () => {
 
 test('ungültige Felder fallen einzeln auf den Standard zurück, Schwelle wird begrenzt', () => {
   const st = memoryStorage({ 'plaudr.audio': JSON.stringify({ mode: 'laut', threshold: 2, denoise: 'ja', preroll: false }) });
-  expect(loadAudioSettings(st)).toEqual({ mode: 'vad', threshold: 0.99, denoise: true, preroll: false });
+  expect(loadAudioSettings(st)).toEqual({ mode: 'vad', threshold: 0.99, denoise: true, preroll: false, deviceId: null });
   const low = memoryStorage({ 'plaudr.audio': JSON.stringify({ threshold: 0.1 }) });
   expect(loadAudioSettings(low).threshold).toBe(0.5);
 });
@@ -39,6 +39,17 @@ test('ohne nutzbaren Speicher: Standard, Speichern wirft nicht', () => {
   const broken = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } } as unknown as Storage;
   expect(loadAudioSettings(broken)).toEqual(DEFAULT_AUDIO);
   expect(() => saveAudioSettings(DEFAULT_AUDIO, broken)).not.toThrow();
+});
+
+test('deviceId bleibt erhalten', () => {
+  const st = memoryStorage();
+  saveAudioSettings({ ...DEFAULT_AUDIO, deviceId: 'abc' }, st);
+  expect(loadAudioSettings(st).deviceId).toBe('abc');
+});
+
+test('leerer String oder falscher Typ bei deviceId ergibt null', () => {
+  expect(loadAudioSettings(memoryStorage({ 'plaudr.audio': JSON.stringify({ deviceId: '' }) })).deviceId).toBeNull();
+  expect(loadAudioSettings(memoryStorage({ 'plaudr.audio': JSON.stringify({ deviceId: 5 }) })).deviceId).toBeNull();
 });
 
 // localStorage-Zugriff wirft (gesperrte Websitedaten): ohne übergebenen Speicher müssen Standardwerte kommen.
