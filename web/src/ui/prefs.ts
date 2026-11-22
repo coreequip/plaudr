@@ -17,10 +17,10 @@ function normalizeHue(v: unknown): number | null {
   return h >= 0 && h <= 359 ? h : null;
 }
 
-export function loadPrefs(storage: Storage = localStorage): UiPrefs {
+export function loadPrefs(storage?: Storage): UiPrefs {
   let raw: Record<string, unknown> = {};
   try {
-    const parsed: unknown = JSON.parse(storage.getItem(KEY) ?? '{}');
+    const parsed: unknown = JSON.parse((storage ?? localStorage).getItem(KEY) ?? '{}');
     if (parsed && typeof parsed === 'object') raw = parsed as Record<string, unknown>;
   } catch {
     /* kaputt oder nicht lesbar: Standard */
@@ -33,9 +33,9 @@ export function loadPrefs(storage: Storage = localStorage): UiPrefs {
   };
 }
 
-export function savePrefs(p: UiPrefs, storage: Storage = localStorage): void {
+export function savePrefs(p: UiPrefs, storage?: Storage): void {
   try {
-    storage.setItem(KEY, JSON.stringify(p));
+    (storage ?? localStorage).setItem(KEY, JSON.stringify(p));
   } catch {
     /* privater Modus: Einstellungen werden nicht gemerkt */
   }

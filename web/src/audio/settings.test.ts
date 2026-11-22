@@ -40,3 +40,22 @@ test('ohne nutzbaren Speicher: Standard, Speichern wirft nicht', () => {
   expect(loadAudioSettings(broken)).toEqual(DEFAULT_AUDIO);
   expect(() => saveAudioSettings(DEFAULT_AUDIO, broken)).not.toThrow();
 });
+
+// localStorage-Zugriff wirft (gesperrte Websitedaten): ohne übergebenen Speicher müssen Standardwerte kommen.
+function ohneLesbaresLocalStorage(f: () => void): void {
+  const alt = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('SecurityError'); } });
+  try {
+    f();
+  } finally {
+    if (alt) Object.defineProperty(globalThis, 'localStorage', alt);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
+}
+
+test('gesperrtes localStorage: Standardwerte, kein Wurf', () => {
+  ohneLesbaresLocalStorage(() => {
+    expect(loadAudioSettings()).toEqual(DEFAULT_AUDIO);
+    expect(() => saveAudioSettings(DEFAULT_AUDIO)).not.toThrow();
+  });
+});

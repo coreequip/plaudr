@@ -12,10 +12,10 @@ export const DEFAULT_AUDIO: AudioSettings = { mode: 'vad', threshold: 0.85, deno
 const KEY = 'plaudr.audio';
 const MODES: readonly SpeakMode[] = ['vad', 'ptt', 'muted'];
 
-export function loadAudioSettings(storage: Storage = localStorage): AudioSettings {
+export function loadAudioSettings(storage?: Storage): AudioSettings {
   let raw: Record<string, unknown> = {};
   try {
-    const parsed: unknown = JSON.parse(storage.getItem(KEY) ?? '{}');
+    const parsed: unknown = JSON.parse((storage ?? localStorage).getItem(KEY) ?? '{}');
     if (parsed && typeof parsed === 'object') raw = parsed as Record<string, unknown>;
   } catch {
     /* kaputt oder nicht lesbar: Standard */
@@ -29,9 +29,9 @@ export function loadAudioSettings(storage: Storage = localStorage): AudioSetting
   };
 }
 
-export function saveAudioSettings(s: AudioSettings, storage: Storage = localStorage): void {
+export function saveAudioSettings(s: AudioSettings, storage?: Storage): void {
   try {
-    storage.setItem(KEY, JSON.stringify(s));
+    (storage ?? localStorage).setItem(KEY, JSON.stringify(s));
   } catch {
     /* privater Modus: Einstellungen werden nicht gemerkt */
   }

@@ -40,3 +40,24 @@ describe('Oberflächen-Einstellungen', () => {
     expect(() => savePrefs(DEFAULT_PREFS, wirft)).not.toThrow();
   });
 });
+
+// localStorage-Zugriff wirft (gesperrte Websitedaten): ohne übergebenen Speicher müssen Standardwerte kommen.
+function ohneLesbaresLocalStorage(f: () => void): void {
+  const alt = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('SecurityError'); } });
+  try {
+    f();
+  } finally {
+    if (alt) Object.defineProperty(globalThis, 'localStorage', alt);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
+}
+
+describe('gesperrtes localStorage', () => {
+  it('liefert Standardwerte und wirft nicht, wenn der Zugriff auf localStorage wirft', () => {
+    ohneLesbaresLocalStorage(() => {
+      expect(loadPrefs()).toEqual(DEFAULT_PREFS);
+      expect(() => savePrefs(DEFAULT_PREFS)).not.toThrow();
+    });
+  });
+});

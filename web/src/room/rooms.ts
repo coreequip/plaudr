@@ -32,9 +32,9 @@ function valid(e: unknown): e is RoomEntry {
   );
 }
 
-export function loadRooms(storage: Storage = localStorage): Rooms {
+export function loadRooms(storage?: Storage): Rooms {
   try {
-    const parsed: unknown = JSON.parse(storage.getItem(KEY) ?? '[]');
+    const parsed: unknown = JSON.parse((storage ?? localStorage).getItem(KEY) ?? '[]');
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(valid).map((e) => ({ secret: e.secret, name: e.name, firstJoined: e.firstJoined, lastJoined: e.lastJoined, peers: [...e.peers] })).sort(byRecent);
   } catch {
@@ -42,9 +42,9 @@ export function loadRooms(storage: Storage = localStorage): Rooms {
   }
 }
 
-export function saveRooms(r: Rooms, storage: Storage = localStorage): void {
+export function saveRooms(r: Rooms, storage?: Storage): void {
   try {
-    storage.setItem(KEY, JSON.stringify([...r].sort(byRecent).slice(0, MAX_ROOMS)));
+    (storage ?? localStorage).setItem(KEY, JSON.stringify([...r].sort(byRecent).slice(0, MAX_ROOMS)));
   } catch {
     /* privater Modus: Verlauf wird nicht gemerkt */
   }

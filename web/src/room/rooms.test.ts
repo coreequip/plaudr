@@ -140,3 +140,22 @@ test('Funktionen ändern die Eingabe nicht', () => {
   removeRoom(r, A);
   expect(JSON.stringify(r)).toBe(snap);
 });
+
+// localStorage-Zugriff wirft (gesperrte Websitedaten): ohne übergebenen Speicher müssen Standardwerte kommen.
+function ohneLesbaresLocalStorage(f: () => void): void {
+  const alt = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('SecurityError'); } });
+  try {
+    f();
+  } finally {
+    if (alt) Object.defineProperty(globalThis, 'localStorage', alt);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
+}
+
+test('gesperrtes localStorage: leere Liste, kein Wurf', () => {
+  ohneLesbaresLocalStorage(() => {
+    expect(loadRooms()).toEqual([]);
+    expect(() => saveRooms([])).not.toThrow();
+  });
+});
