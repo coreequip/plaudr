@@ -29,6 +29,7 @@ declare global {
       senderTrackId(): string | null;
       setSettings(s: Partial<AudioSettings>): Promise<void>;
       setPressed(b: boolean): void;
+      remoteSdp(peerId: string): string | null;
     };
   }
 }
@@ -186,6 +187,7 @@ async function join(secret: string): Promise<void> {
     senderTrackId: () => mesh.senderTrackId(),
     setSettings,
     setPressed: (b) => capture?.setPressed(b),
+    remoteSdp: (id) => mesh.remoteSdp(id),
   };
 }
 

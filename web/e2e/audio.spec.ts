@@ -63,3 +63,11 @@ test('Umschalten der Rauschunterdrückung behält den gesendeten Track', async (
   expect(await connected(a)).toBe(1);
   expect(await maxLevel(b, aId, 5000)).toBeGreaterThan(0.01);
 });
+
+test('B erhält von A ein für Opus abgestimmtes SDP', async ({ browser }) => {
+  const { b, aId } = await pair(browser, 'opus');
+  const sdp = await b.evaluate((id) => window.plaudr!.remoteSdp(id), aId);
+  expect(sdp).toContain('usedtx=1');
+  expect(sdp).toContain('maxaveragebitrate=32000');
+  expect(sdp).toContain('stereo=0');
+});

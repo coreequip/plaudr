@@ -79,6 +79,10 @@ export class Mesh {
     return Object.fromEntries([...this.links].map(([id, l]) => [id, l.audioLevel()]));
   }
 
+  remoteSdp(peerId: string): string | null {
+    return this.links.get(peerId)?.remoteSdp() ?? null;
+  }
+
   senderTrackId(): string | null {
     for (const l of this.links.values()) {
       const id = l.senderTrackId();

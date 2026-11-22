@@ -1,5 +1,6 @@
 import type { Bodies, Payload } from '../signaling/types';
 import { IceBatcher } from './ice-batcher';
+import { tuneOpus } from './sdp';
 
 export interface PeerLinkOptions {
   peerId: string;
@@ -21,6 +22,7 @@ export interface PeerLinkLike {
   /** Pegel 0..1 des zuletzt empfangenen Audiopakets; 0, wenn älter als 500 ms. */
   audioLevel(): number;
   senderTrackId(): string | null;
+  remoteSdp(): string | null;
   close(): void;
 }
 
@@ -56,7 +58,10 @@ export class PeerLink implements PeerLinkLike {
     pc.onnegotiationneeded = async () => {
       try {
         this.makingOffer = true;
-        await pc.setLocalDescription();
+        // Explizit statt setLocalDescription() ohne Argument: Die Opus-Parameter müssen vor dem Setzen ins SDP.
+        const offer = await pc.createOffer();
+        if (pc.signalingState !== 'stable') return; // inzwischen kam ein Angebot herein (Perfect Negotiation)
+        await pc.setLocalDescription({ type: 'offer', sdp: tuneOpus(offer.sdp ?? '') });
         o.send('offer', { sdp: pc.localDescription!.sdp });
       } catch (err) {
         console.warn('[plaudr] Angebot fehlgeschlagen', err);
@@ -65,7 +70,11 @@ export class PeerLink implements PeerLinkLike {
       }
     };
 
-    pc.ontrack = (e) => o.onTrack(e.streams[0] ?? new MediaStream([e.track]));
+    pc.ontrack = (e) => {
+      // Chromium: so wenig Puffer wie möglich, der Jitterpuffer wächst bei Bedarf selbst.
+      if ('jitterBufferTarget' in e.receiver) (e.receiver as { jitterBufferTarget: number | null }).jitterBufferTarget = 0;
+      o.onTrack(e.streams[0] ?? new MediaStream([e.track]));
+    };
 
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
@@ -107,6 +116,10 @@ export class PeerLink implements PeerLinkLike {
     return src.audioLevel ?? 0;
   }
 
+  remoteSdp(): string | null {
+    return this.pc.remoteDescription?.sdp ?? null;
+  }
+
   senderTrackId(): string | null {
     return this.pc.getSenders().find((s) => s.track?.kind === 'audio')?.track?.id ?? null;
   }
@@ -144,7 +157,8 @@ export class PeerLink implements PeerLinkLike {
       if (this.ignoreOffer) return;
       await pc.setRemoteDescription({ type: p.kind, sdp });
       if (p.kind === 'offer') {
-        await pc.setLocalDescription();
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription({ type: 'answer', sdp: tuneOpus(answer.sdp ?? '') });
         this.o.send('answer', { sdp: pc.localDescription!.sdp });
       }
     } else if (p.kind === 'ice') {
