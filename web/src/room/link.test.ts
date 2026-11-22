@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildLink, createRoomSecret, secretFromHash } from './link';
+import { buildLink, createRoomSecret, secretFromHash, secretFromLink } from './link';
 
 describe('createRoomSecret', () => {
   test('liefert 43 Zeichen base64url', () => {
@@ -27,3 +27,13 @@ test('buildLink setzt das Geheimnis ins Fragment', () => {
   expect(buildLink('https://plaudr.room.ws', s)).toBe('https://plaudr.room.ws/#' + s);
 });
 
+
+describe('secretFromLink', () => {
+  const s = createRoomSecret();
+  test.each([`https://plaudr.room.ws/#${s}`, `plaudr.room.ws/#${s}`, `  ${s}  `, `\n${s}\n`])('nimmt %j', (t) => {
+    expect(secretFromLink(t)).toBe(s);
+  });
+  test.each(['https://plaudr.room.ws/', '#abc', '', '   '])('verwirft %j', (t) => {
+    expect(secretFromLink(t)).toBeNull();
+  });
+});

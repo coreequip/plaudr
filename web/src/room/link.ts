@@ -16,3 +16,9 @@ export function buildLink(origin: string, secret: string): string {
   return `${origin}/#${secret}`;
 }
 
+
+/** Geheimnis aus eingefügtem Text: ganzer Link, Link ohne Schema oder nacktes Geheimnis. */
+export function secretFromLink(text: string): string | null {
+  const t = text.trim();
+  return secretFromHash(t.slice(t.lastIndexOf('#') + 1));
+}
