@@ -75,7 +75,7 @@ test('ohne Mikrofon', async ({ browser }) => {
   const d = await open(browser, h, { noMic: true });
   await join(d, 'Dora');
   await expect(d.locator('#notice')).toHaveText('Kein Mikrofon: du hörst nur zu.');
-  await expect(d.locator('#mute')).toBeDisabled();
+  await expect(d.locator('#mode-vad')).toBeDisabled();
   await expectMesh([a, d], 1);
   await expect.poll(() => bytes(d).then((b) => Object.values(b)[0] ?? 0)).toBeGreaterThan(0);
 });

@@ -14,6 +14,7 @@ import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
 import { initBackupPanel, showBackupState } from './ui/backup-panel';
+import { initControls } from './ui/controls';
 import * as view from './ui/view';
 
 declare global {
@@ -154,21 +155,11 @@ async function join(secret: string): Promise<void> {
   view.renderPeers([]);
   view.show('call');
 
-  // Vorläufig: Stumm ein und aus; die Bedienelemente für alle Modi kommen mit der UI.
-  const mute = $<HTMLButtonElement>('mute');
-  mute.disabled = !capture;
-  let before: AudioSettings['mode'] = settings.mode === 'muted' ? 'vad' : settings.mode;
-  const renderMute = () => (mute.textContent = settings.mode === 'muted' ? 'Mikro an' : 'Stumm');
-  renderMute();
-  mute.onclick = async () => {
-    if (settings.mode === 'muted') await setSettings({ mode: before });
-    else {
-      before = settings.mode;
-      await setSettings({ mode: 'muted' });
-    }
-    renderMute();
-  };
+  initControls({ capture, settings: () => settings, setSettings });
+  const speakingTimer = setInterval(() => view.markSpeaking(mesh.audioLevels()), 100);
+
   $('leave').onclick = async () => {
+    clearInterval(speakingTimer);
     capture?.close();
     await mesh.leave();
     location.reload();

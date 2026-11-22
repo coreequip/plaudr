@@ -35,3 +35,14 @@ details[open] { display: grid; }
 details > :not(summary) { margin-top: 8px; display: block; width: 100%; }
 summary { cursor: pointer; color: var(--muted); }
 button.link { border: none; background: none; color: var(--muted); text-decoration: underline; padding: 0; justify-self: start; }
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.modes button[aria-pressed='true'] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+#ptt { padding: 18px; user-select: none; touch-action: none; }
+.slider { display: grid; gap: 4px; font-weight: 400; color: var(--muted); }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 400; }
+.speaking-me { color: var(--accent); margin: 0; font-weight: 600; }
+#peers li { align-items: center; gap: 10px; }
+#peers .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+#peers li.speaking .dot { background: var(--accent); }
+#peers .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#peers input[type='range'] { width: 90px; padding: 0; }

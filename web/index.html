@@ -47,8 +47,19 @@
         <button id="unmute-audio" class="primary" hidden>Ton aktivieren</button>
         <ul id="peers"></ul>
         <p id="alone">Noch niemand da. Schick den Link herum.</p>
+        <div class="modes" role="group" aria-label="Sprechmodus">
+          <button id="mode-vad" aria-pressed="false">Sprachaktivierung</button>
+          <button id="mode-ptt" aria-pressed="false">Push-to-Talk</button>
+          <button id="mode-muted" aria-pressed="false">Stumm</button>
+        </div>
+        <button id="ptt" class="primary" hidden>Zum Sprechen halten (oder Leertaste)</button>
+        <label id="vad-threshold-row" class="slider" hidden>
+          Schwelle der Sprachaktivierung
+          <input id="vad-threshold" type="range" min="0.5" max="0.99" step="0.01" />
+        </label>
+        <label class="check"><input id="denoise" type="checkbox" /> Rauschunterdrückung</label>
+        <p id="me-speaking" class="speaking-me" hidden>du sprichst</p>
         <div class="row">
-          <button id="mute">Stumm</button>
           <button id="leave">Verlassen</button>
         </div>
         <div id="audio" hidden></div>

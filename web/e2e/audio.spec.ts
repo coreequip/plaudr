@@ -71,3 +71,48 @@ test('B erhält von A ein für Opus abgestimmtes SDP', async ({ browser }) => {
   expect(sdp).toContain('maxaveragebitrate=32000');
   expect(sdp).toContain('stereo=0');
 });
+
+test.describe('Bedienung', () => {
+  test('Push-to-Talk über Modusknopf, Halteknopf und Leertaste', async ({ browser }) => {
+    const { a, b, aId } = await pair(browser, 'bedienungptt');
+    await expect(a.locator('#mode-vad')).toHaveAttribute('aria-pressed', 'true');
+    await a.click('#mode-ptt');
+    await expect(a.locator('#mode-ptt')).toHaveAttribute('aria-pressed', 'true');
+    await expect(a.locator('#mode-vad')).toHaveAttribute('aria-pressed', 'false');
+    await expect(a.locator('#ptt')).toBeVisible();
+    await expect(a.locator('#vad-threshold')).toBeHidden();
+    await b.waitForTimeout(700);
+    expect(await maxLevel(b, aId, 2000)).toBeLessThan(0.005);
+
+    await a.locator('#ptt').hover();
+    await a.mouse.down();
+    expect(await maxLevel(b, aId, 2500)).toBeGreaterThan(0.01);
+    await a.mouse.up();
+    await b.waitForTimeout(1000);
+    expect(await maxLevel(b, aId, 1500)).toBeLessThan(0.005);
+
+    await a.keyboard.down('Space');
+    expect(await maxLevel(b, aId, 2500)).toBeGreaterThan(0.01);
+    await a.keyboard.up('Space');
+    await b.waitForTimeout(1000);
+    expect(await maxLevel(b, aId, 1500)).toBeLessThan(0.005);
+  });
+
+  test('Modus bleibt über Neuladen erhalten', async ({ browser }) => {
+    const { a } = await pair(browser, 'bedienungmodus');
+    await a.click('#mode-muted');
+    await expect(a.locator('#mode-muted')).toHaveAttribute('aria-pressed', 'true');
+    await a.reload();
+    await join(a, 'Anna');
+    await expect(a.locator('#mode-muted')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('Lautstärke je Teilnehmer und eigene Sprechanzeige', async ({ browser }) => {
+    const { a, b, aId } = await pair(browser, 'bedienunglaut');
+    await expect(b.locator('#vad-threshold')).toBeVisible();
+    await b.locator(`#peers li[data-peer="${aId}"] input[data-volume]`).fill('0.3');
+    await expect.poll(() => b.evaluate((id) => document.querySelector<HTMLAudioElement>(`audio[data-peer="${id}"]`)!.volume, aId)).toBeCloseTo(0.3);
+    await expect(a.locator('#me-speaking')).toBeVisible({ timeout: 10_000 });
+    await expect(b.locator(`#peers li[data-peer="${aId}"].speaking`)).toBeAttached({ timeout: 10_000 });
+  });
+});
