@@ -1,8 +1,5 @@
-import wasmUrl from '@shiguredo/rnnoise-wasm/dist/rnnoise.wasm?url';
-
 /** RNNoise arbeitet auf 10-ms-Frames bei 48 kHz. */
 export const FRAME_SIZE = 480;
-export const RNNOISE_WASM_URL: string = wasmUrl;
 
 export interface Denoiser {
   /** Entrauscht `frame` (Werte in [-1, 1]) in place und liefert die Sprachwahrscheinlichkeit 0..1. */
