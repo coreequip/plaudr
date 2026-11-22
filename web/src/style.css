@@ -46,3 +46,7 @@ button.link { border: none; background: none; color: var(--muted); text-decorati
 #peers li.speaking .dot { background: var(--accent); }
 #peers .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #peers input[type='range'] { width: 90px; padding: 0; }
+.table-wrap { overflow-x: auto; }
+#debug-table { border-collapse: collapse; font-size: 0.85rem; width: 100%; }
+#debug-table th, #debug-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.muted { color: var(--muted); margin: 0; font-size: 0.85rem; }

@@ -1,6 +1,7 @@
 import type { Signaling } from '../signaling/signaling';
 import type { Bodies, Payload } from '../signaling/types';
 import { randomBase64url } from '../util/base64url';
+import { summarizeStats, type PeerStats } from './stats';
 import { PeerLink, type PeerLinkLike, type PeerLinkOptions } from './peer-link';
 
 const LEAVE_GRACE_MS = 5000;
@@ -72,6 +73,12 @@ export class Mesh {
       });
       out[id] = sum;
     }
+    return out;
+  }
+
+  async peerStats(): Promise<Record<string, PeerStats>> {
+    const out: Record<string, PeerStats> = {};
+    for (const [id, link] of this.links) out[id] = summarizeStats(await link.getStats());
     return out;
   }
 

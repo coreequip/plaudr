@@ -15,6 +15,7 @@ import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
 import { initBackupPanel, showBackupState } from './ui/backup-panel';
 import { initControls } from './ui/controls';
+import { initDebug } from './ui/debug';
 import * as view from './ui/view';
 
 declare global {
@@ -157,9 +158,17 @@ async function join(secret: string): Promise<void> {
 
   initControls({ capture, settings: () => settings, setSettings });
   const speakingTimer = setInterval(() => view.markSpeaking(mesh.audioLevels()), 100);
+  const stopDebug = initDebug({
+    peers: () => mesh.peers(),
+    stats: () => mesh.peerStats(),
+    activity: () => capture?.activity() ?? { open: false, vad: 0 },
+    settings: () => settings,
+    setSettings,
+  });
 
   $('leave').onclick = async () => {
     clearInterval(speakingTimer);
+    stopDebug();
     capture?.close();
     await mesh.leave();
     location.reload();

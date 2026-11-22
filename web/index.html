@@ -62,6 +62,19 @@
         <div class="row">
           <button id="leave">Verlassen</button>
         </div>
+        <details id="debug">
+          <summary>Debug</summary>
+          <div class="table-wrap">
+            <table id="debug-table">
+              <thead>
+                <tr><th>Name</th><th>RTT</th><th>Jitter</th><th>Puffer</th><th>Verlust</th><th>Weg</th><th>Mund-zu-Ohr (Schätzung)</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <label class="check"><input id="debug-preroll" type="checkbox" /> Vorlauf 200 ms</label>
+          <p id="debug-vad" class="muted"></p>
+        </details>
         <div id="audio" hidden></div>
       </section>
     </main>

@@ -116,3 +116,16 @@ test.describe('Bedienung', () => {
     await expect(b.locator(`#peers li[data-peer="${aId}"].speaking`)).toBeAttached({ timeout: 10_000 });
   });
 });
+
+test('Debug-Panel zeigt RTT und Verbindungsart je Teilnehmer', async ({ browser }) => {
+  const { a } = await pair(browser, 'debug');
+  await a.locator('#debug summary').click();
+  const row = a.locator('#debug-table tbody tr').first();
+  await expect(row).toContainText('Bert', { timeout: 5000 });
+  await expect(row).toContainText('host', { timeout: 5000 });
+  await expect(row.locator('td[data-k="rttMs"]')).toHaveText(/^\d+(,\d)? ms$/, { timeout: 5000 });
+  await expect(row.locator('td[data-k="estimateMs"]')).toHaveText(/^\d+(,\d)? ms$/, { timeout: 5000 });
+  await expect(a.locator('#debug-preroll')).toBeChecked();
+  await a.locator('#debug-preroll').uncheck();
+  expect(await a.evaluate(() => JSON.parse(localStorage.getItem('plaudr.audio')!).preroll)).toBe(false);
+});
