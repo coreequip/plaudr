@@ -3,8 +3,10 @@
 // verboten sind Aufrufe (invoke(, plugin:) und Importe aus @tauri-apps.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const dist = new URL('../dist', import.meta.url).pathname;
+// fileURLToPath statt .pathname: unter Windows ergäbe .pathname „/D:/…“ und damit kaputte Pfade.
+const dist = fileURLToPath(new URL('../dist', import.meta.url));
 const html = readFileSync(join(dist, 'index.html'), 'utf8');
 const entries = [...html.matchAll(/<script[^>]+src="([^"]+\.js)"/g)].map((m) => m[1].replace(/^\.?\//, ''));
 if (entries.length === 0) {
