@@ -4,7 +4,6 @@ import { rnnoiseModule, speechSamples } from './test-audio';
 
 const mod = rnnoiseModule();
 const rms = (a: Float32Array) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
-const quantile = (a: number[], p: number) => [...a].sort((x, y) => x - y)[Math.floor(p * (a.length - 1))];
 
 test('Framegröße ist 480', () => {
   expect(FRAME_SIZE).toBe(480);
@@ -30,24 +29,37 @@ test('Sprache aus der Testdatei: mindestens 25 % der Frames über 0,85', () => {
   d.destroy();
 });
 
-// Gemessen 57 % leiser bei Amplitude 0,05.
-test('weißes Rauschen wird um mindestens 50 % leiser, VAD bleibt niedrig', () => {
+/** Deterministisches Rauschen (mulberry32), damit der Test nicht vom Zufall abhängt. */
+function noise(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+  };
+}
+
+// Reines weißes Rauschen ist kein brauchbares Testsignal (RNNoise reagiert darauf sprunghaft); deshalb Sprache plus
+// Rauschen. Gemessen: in den Pausen 7 % der Rauschamplitude übrig, Sprache unverändert.
+test('Rauschen in Sprechpausen wird um mindestens 75 % leiser, Sprache bleibt erhalten', () => {
   const d = createDenoiser(mod);
-  let inE = 0;
-  let outE = 0;
-  const vads: number[] = [];
-  for (let i = 0; i < 300; i++) {
-    const f = Float32Array.from({ length: FRAME_SIZE }, () => (Math.random() * 2 - 1) * 0.05);
-    const before = rms(f);
-    const vad = d.process(f);
-    if (i >= 50) {
-      inE += before;
-      outE += rms(f);
-      vads.push(vad);
-    }
+  const s = speechSamples();
+  const rnd = noise(1);
+  const energy = (f: Float32Array) => f.reduce((sum, v) => sum + v * v, 0);
+  let pauseIn = 0, pauseOut = 0, speechIn = 0, speechOut = 0;
+  for (let i = 0; i + FRAME_SIZE <= s.length; i += FRAME_SIZE) {
+    const clean = s.subarray(i, i + FRAME_SIZE);
+    const cleanE = energy(clean) / FRAME_SIZE;
+    const f = Float32Array.from(clean, (v) => v + rnd() * 0.01);
+    const before = energy(f);
+    d.process(f);
+    if (i < 100 * FRAME_SIZE) continue; // Einschwingen
+    if (cleanE < 1e-7) [pauseIn, pauseOut] = [pauseIn + before, pauseOut + energy(f)];
+    else if (cleanE > 1e-3) [speechIn, speechOut] = [speechIn + before, speechOut + energy(f)];
   }
-  expect(outE / inE).toBeLessThan(0.5);
-  expect(quantile(vads, 0.9)).toBeLessThan(0.2);
+  expect(Math.sqrt(pauseOut / pauseIn)).toBeLessThan(0.25);
+  expect(Math.sqrt(speechOut / speechIn)).toBeGreaterThan(0.8);
   d.destroy();
 });
 
