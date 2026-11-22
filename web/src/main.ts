@@ -196,7 +196,20 @@ function boot(): void {
   $('create').onclick = () => {
     location.hash = createRoomSecret();
   };
-  $('copy').onclick = () => void navigator.clipboard?.writeText($<HTMLInputElement>('link').value);
+  $('copy').onclick = async () => {
+    const btn = $('copy');
+    try {
+      await navigator.clipboard.writeText($<HTMLInputElement>('link').value);
+    } catch {
+      return;
+    }
+    btn.classList.add('done');
+    btn.title = 'Kopiert';
+    setTimeout(() => {
+      btn.classList.remove('done');
+      btn.title = 'Link kopieren';
+    }, 1500);
+  };
   $('unmute-audio').onclick = view.resumeAllAudio;
 
   const route = () => {
