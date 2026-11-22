@@ -63,17 +63,26 @@ pub fn run() {
             use tauri::menu::{Menu, MenuItem, MenuItemKind};
             let menu = Menu::default(app)?;
             if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
-                let n = app_menu.items()?.len();
-                if n > 0 {
-                    app_menu.remove_at(n - 1)?;
-                }
-                app_menu.append(&MenuItem::with_id(
-                    app,
-                    QUIT_MENU_ID,
-                    "plaudr beenden",
-                    true,
-                    Some("CmdOrCtrl+Q"),
-                )?)?;
+                // Nur den vordefinierten „Quit …“ ersetzen; ändert Tauri das Standardmenü, bleibt es unangetastet.
+                let items = app_menu.items()?;
+                let quit = items.iter().position(|i| match i {
+                    MenuItemKind::Predefined(p) => p.text().is_ok_and(|t| t.starts_with("Quit")),
+                    _ => false,
+                });
+                let Some(pos) = quit else {
+                    return Ok(menu);
+                };
+                app_menu.remove_at(pos)?;
+                app_menu.insert(
+                    &MenuItem::with_id(
+                        app,
+                        QUIT_MENU_ID,
+                        "plaudr beenden",
+                        true,
+                        Some("CmdOrCtrl+Q"),
+                    )?,
+                    pos,
+                )?;
             }
             Ok(menu)
         })

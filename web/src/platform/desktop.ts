@@ -27,7 +27,7 @@ const shortcutApi: ShortcutApi = {
 
 /** Ereignis aus lib.rs: Cmd+Q, Beenden über das Dock oder Abmelden des Systems. */
 const QUIT_EVENT = 'plaudr://quit';
-/** So lange darf das Verlassen des Raums das Beenden höchstens aufhalten. */
+/** So lange darf das Verlassen des Raums das Beenden oder den Wechsel zu den Räumen höchstens aufhalten. */
 const LEAVE_TIMEOUT_MS = 1000;
 /** So lange bleibt das Fenster beim ersten Schließen mit dem Hinweis offen. */
 const NOTICE_MS = 2000;
@@ -92,17 +92,28 @@ export function desktopPlatform(actions: AppActions): Platform {
     })().catch((err) => console.warn('[plaudr] Fenster zeigen fehlgeschlagen', err));
   };
 
+  /** Verlässt den Raum, wartet darauf aber höchstens LEAVE_TIMEOUT_MS; lehnt nie ab. */
+  const leaveAtMost = () =>
+    Promise.race([
+      actions.leave().catch((err) => console.warn('[plaudr] Verlassen fehlgeschlagen', err)),
+      new Promise<void>((r) => setTimeout(r, LEAVE_TIMEOUT_MS)),
+    ]);
+
   // Beenden: erst den Raum verlassen, damit die anderen dich sofort gehen sehen (keine Gnadenfrist), höchstens 1 s.
   let quitting: Promise<void> | null = null;
   const quit = () =>
     (quitting ??= (async () => {
-      await Promise.race([actions.leave().catch(() => {}), new Promise((r) => setTimeout(r, LEAVE_TIMEOUT_MS))]);
+      await leaveAtMost();
       await exit(0);
-    })());
+    })().catch((err) => {
+      // Ohne Beenden bliebe jeder weitere Klick wirkungslos: beim nächsten Mal neu versuchen.
+      console.warn('[plaudr] Beenden fehlgeschlagen', err);
+      quitting = null;
+    }));
 
-  // Raum verlassen aus dem Tray endet wie „Verlassen“ im Fenster bei den Räumen.
+  // Raum verlassen aus dem Tray endet wie „Verlassen“ im Fenster bei den Räumen, auch wenn das Verlassen hängt.
   const leaveRoom = async () => {
-    await actions.leave().catch((err) => console.warn('[plaudr] Verlassen fehlgeschlagen', err));
+    await leaveAtMost();
     location.assign(location.pathname);
   };
 
