@@ -7,6 +7,7 @@ import { loadOrCreateIdentity } from './crypto/identity';
 import { idbIdentityStore } from './crypto/identity-store';
 import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
+import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
 import * as view from './ui/view';
@@ -24,6 +25,7 @@ declare global {
 }
 
 const NAME_KEY = 'plaudr.name';
+const CONTACTS_KEY = 'plaudr.contacts';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 function loadName(): string {
@@ -39,6 +41,22 @@ function saveName(name: string): void {
     localStorage.setItem(NAME_KEY, name);
   } catch {
     /* privater Modus: Name wird nicht gemerkt */
+  }
+}
+
+function onHello(peerId: string, name: string): void {
+  let contacts: Contacts = {};
+  try {
+    contacts = JSON.parse(localStorage.getItem(CONTACTS_KEY) ?? '{}') as Contacts;
+  } catch {
+    /* kaputt oder nicht lesbar: neu anfangen */
+  }
+  const r = noteContact(contacts, peerId, name, Date.now());
+  if (r.keyChanged) view.notice(`${name} hat einen neuen Schlüssel.`);
+  try {
+    localStorage.setItem(CONTACTS_KEY, JSON.stringify(r.contacts));
+  } catch {
+    /* privater Modus: Kontakte werden nicht gemerkt */
   }
 }
 
@@ -81,6 +99,7 @@ async function join(secret: string): Promise<void> {
     onTrack: view.attachAudio,
     onPeerGone: view.detachAudio,
     onChange: view.renderPeers,
+    onHello,
   });
   mesh.start();
 

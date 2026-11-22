@@ -39,6 +39,7 @@ let sig: FakeSignaling;
 let links: FakeLink[];
 let gone: string[];
 let mesh: Mesh;
+let hellos: [string, string][];
 
 const hello = (from: string, cid = 'c-' + from, name = from) =>
   sig.emitMsg({ kind: 'hello', from, cid, body: { pub: 'PUB-' + from, name, caps: [] } });
@@ -49,10 +50,12 @@ beforeEach(() => {
   sig = new FakeSignaling();
   links = [];
   gone = [];
+  hellos = [];
   mesh = new Mesh({
     signaling: sig, selfId: 'M', selfPub: 'PUB-M', name: 'Mira', localStream: null, iceServers: [],
     createLink: (o) => { const l = new FakeLink(o); links.push(l); return l; },
     onTrack: () => {}, onPeerGone: (id) => gone.push(id), onChange: () => {},
+    onHello: (id, n) => hellos.push([id, n]),
   });
   mesh.start();
 });
@@ -206,4 +209,11 @@ test('leave verabschiedet sich und räumt auf', async () => {
   expect(sig.sent).toContainEqual({ kind: 'bye', to: '*', body: {} });
   expect(linksFor('B')[0].closed).toBe(true);
   expect(sig.closed).toBe(true);
+});
+
+test('onHello meldet hello an alle und gerichtetes hello, nicht das eigene', () => {
+  hello('B', 'c-B', 'Bea');
+  sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { pub: 'PUB-C', name: 'Cem', caps: [] } });
+  sig.emitMsg({ kind: 'hello', from: 'M', body: { pub: 'PUB-M', name: 'Mira', caps: [] } });
+  expect(hellos).toEqual([['B', 'Bea'], ['C', 'Cem']]);
 });

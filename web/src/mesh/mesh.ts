@@ -23,6 +23,8 @@ export interface MeshOptions {
   onTrack: (peerId: string, s: MediaStream) => void;
   onPeerGone: (peerId: string) => void;
   onChange: (peers: PeerView[]) => void;
+  /** Jedes geprüfte hello eines anderen Teilnehmers, etwa für die Kontaktliste. */
+  onHello?: (peerId: string, name: string) => void;
 }
 
 /** Hält zu jedem anderen Teilnehmer genau einen PeerLink (Full Mesh). */
@@ -79,6 +81,7 @@ export class Mesh {
     switch (p.kind) {
       case 'hello': {
         const name = (p.body as Bodies['hello']).name;
+        this.o.onHello?.(p.from, name);
         if (link) {
           this.setCid(p.from, link, p.cid);
           link.name = name;
