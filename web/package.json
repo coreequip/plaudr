@@ -10,6 +10,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@shiguredo/rnnoise-wasm": "2022.2.0",
     "roomws": "file:../vendor/room_ws/example"
   },
   "devDependencies": {
