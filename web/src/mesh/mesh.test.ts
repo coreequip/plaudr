@@ -98,12 +98,12 @@ describe('hello', () => {
     expect(links).toHaveLength(0);
     expect(sig.sent).toEqual([]);
     sig.emitMsg({ kind: 'offer', from: 'C', body: { sdp: 'x' } });
-    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', state: 'new', muted: false }]);
+    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', pub: 'PUB-C', state: 'new', muted: false }]);
   });
   test('ein Peer aus einem offer bekommt seinen Namen aus dem späteren hello', () => {
     sig.emitMsg({ kind: 'offer', from: 'C', body: { sdp: 'x' } });
     hello('C', 'c-C', 'Cem');
-    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', state: 'new', muted: false }]);
+    expect(mesh.peers()).toEqual([{ peerId: 'C', name: 'Cem', pub: 'PUB-C', state: 'new', muted: false }]);
   });
   test('eigene Nachrichten werden ignoriert', () => {
     hello('M');

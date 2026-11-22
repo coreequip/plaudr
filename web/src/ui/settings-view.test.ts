@@ -4,7 +4,7 @@ import { DEFAULT_HUE, previewColors, wordsLine } from './settings-view';
 
 describe('Einstellungen', () => {
   it('setzt die vier Wörter mit Mittelpunkt zusammen', () => {
-    expect(wordsLine(['tiger', 'anker', 'wolke', 'mond'])).toBe('tiger · anker · wolke · mond');
+    expect(wordsLine(['tiger', 'anker', 'blume', 'regen'])).toBe('tiger · anker · blume · regen');
   });
   it('Vorschau ohne Farbton zeigt das Standardgrün beider Helligkeiten', () => {
     const p = previewColors(null);

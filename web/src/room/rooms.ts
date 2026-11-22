@@ -13,6 +13,8 @@ export type Rooms = RoomEntry[];
 const KEY = 'plaudr.rooms';
 const MAX_ROOMS = 50;
 const MAX_NAME = 40;
+/** Namen kommen ungeprüft aus dem hello anderer: höchstens so viele, je so lang wie ein eigener Name. */
+const MAX_PEERS = 8;
 
 const byRecent = (a: RoomEntry, b: RoomEntry) => b.lastJoined - a.lastJoined;
 
@@ -62,7 +64,7 @@ export function noteJoin(r: Rooms, secret: string, now: number): Rooms {
 const patch = (r: Rooms, secret: string, f: (e: RoomEntry) => RoomEntry): Rooms => r.map((e) => (e.secret === secret ? f(e) : e));
 
 export function notePeers(r: Rooms, secret: string, names: string[]): Rooms {
-  return patch(r, secret, (e) => ({ ...e, peers: [...names] }));
+  return patch(r, secret, (e) => ({ ...e, peers: names.slice(0, MAX_PEERS).map((n) => [...n].slice(0, MAX_NAME).join('')) }));
 }
 
 export function renameRoom(r: Rooms, secret: string, name: string): Rooms {

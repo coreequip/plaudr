@@ -4,6 +4,22 @@ import { toBase64url } from '../util/base64url';
 
 const key = (b: number) => toBase64url(new Uint8Array(32).fill(b));
 
+/** Editierabstand (Einfügen, Löschen, Ersetzen je ein Schritt). */
+function levenshtein(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** Grobe Lautform: was am Telefon gleich klingt, wird gleich geschrieben. */
+const sound = (w: string) =>
+  w.replace(/ck/g, 'k').replace(/ph/g, 'f').replace(/ie/g, 'i').replace(/ai/g, 'ei').replace(/([aeiou])h/g, '$1')
+    .replace(/tz/g, 'z').replace(/d/g, 't').replace(/b/g, 'p').replace(/g/g, 'k').replace(/[vw]/g, 'f').replace(/(.)\1/g, '$1');
+
 describe('WORDS', () => {
   test('hat genau 256 Einträge, alle verschieden', () => {
     expect(WORDS).toHaveLength(256);
@@ -14,6 +30,24 @@ describe('WORDS', () => {
   });
   test('kein Wort ist Anfang eines anderen', () => {
     for (const a of WORDS) for (const b of WORDS) if (a !== b) expect(b.startsWith(a), `${a} / ${b}`).toBe(false);
+  });
+  test('keine Umschriften von Umlauten', () => {
+    for (const w of WORDS) if (w !== 'feuer') expect(w, w).not.toMatch(/ae|oe|[^q]ue/);
+  });
+  test('kein Wortpaar unterscheidet sich nur in einem Buchstaben, auch nicht dem Klang nach', () => {
+    const near: string[] = [];
+    for (let i = 0; i < WORDS.length; i++)
+      for (let j = i + 1; j < WORDS.length; j++) {
+        const [a, b] = [WORDS[i], WORDS[j]];
+        if (levenshtein(a, b) <= 1 || levenshtein(sound(a), sound(b)) <= 1) near.push(`${a} / ${b}`);
+      }
+    expect(near).toEqual([]);
+  });
+  test('Abstandsprüfung erkennt die bekannten Fallen', () => {
+    expect(levenshtein('huhn', 'hahn')).toBe(1);
+    expect(levenshtein('bach', 'buch')).toBe(1);
+    expect(levenshtein(sound('hund'), sound('huhn'))).toBe(1);
+    expect(levenshtein(sound('rad'), sound('rat'))).toBe(0);
   });
 });
 

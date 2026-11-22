@@ -172,3 +172,48 @@ test('vier Wörter stehen da und passen zu fingerprintWords', async ({ browser }
   await expect(a.locator('#my-words')).toHaveText(/^\w+ · \w+ · \w+ · \w+$/);
   await expect(a.locator('#my-words')).toHaveText(await expectedWords(a));
 });
+
+test('Einstellungen im Gespräch zeigen die Wörter der anderen, passend zu deren eigenen', async ({ browser }) => {
+  const h = roomHash('fremdwoerter');
+  const [a, b] = [await open(browser, h), await open(browser, h)];
+  await join(a, 'Anna');
+  await join(b, 'Bert');
+  await expectMesh([a, b], 1);
+  const bId = await b.evaluate(() => window.plaudr!.selfId);
+  const bWords = await expectedWords(b);
+  await b.click('#call-settings');
+  await expect(b.locator('#my-words')).toHaveText(bWords);
+
+  // Tooltip am Namen der Karte im Gespräch.
+  await expect(a.locator(`#peers li[data-peer="${bId}"] .name`)).toHaveAttribute('title', bWords);
+  await a.click('#call-settings');
+  const row = a.locator(`#room-words-list li[data-peer="${bId}"]`);
+  await expect(row.locator('.name')).toHaveText('Bert');
+  await expect(row.locator('.words')).toHaveText(bWords);
+  await expect(a.locator('#room-words-list li')).toHaveCount(1);
+});
+
+test('Sicherung im Gespräch geladen: Wörter bleiben bis zum nächsten Beitritt', async ({ browser }, info) => {
+  // Fremde Sicherung aus einem anderen Browser.
+  const other = await startSettings(browser);
+  await other.click('#settings-backup');
+  const file = await backup(other);
+  const path = info.outputPath('fremd.plaudr-key');
+  await import('node:fs/promises').then((fs) => fs.writeFile(path, file));
+
+  const a = await open(browser, roomHash('ladenimgespraech'));
+  await join(a, 'Anna');
+  await a.click('#call-settings');
+  const before = await expectedWords(a);
+  await expect(a.locator('#my-words')).toHaveText(before);
+  await expect(a.locator('#settings-restore-hint')).toBeHidden();
+  await a.click('#settings-restore');
+  await a.setInputFiles('#restore-file', path);
+  await a.fill('#restore-pw', BACKUP_PW);
+  await a.click('#restore-load');
+  await expect(a.locator('#settings-identity-done')).toHaveText('Sicherung geladen.');
+  await expect(a.locator('#settings-restore-hint')).toHaveText('Gilt ab dem nächsten Beitritt.');
+  await expect(a.locator('#settings-restore-hint')).toBeVisible();
+  await expect(a.locator('#my-words')).toHaveText(before);
+  expect(await expectedWords(a)).not.toBe(before);
+});

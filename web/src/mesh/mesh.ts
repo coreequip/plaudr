@@ -11,6 +11,8 @@ export type SignalingLike = Pick<Signaling, 'send' | 'onReady' | 'onMessage' | '
 export interface PeerView {
   peerId: string;
   name: string;
+  /** Öffentlicher Schlüssel aus dem geprüften hello (für die vier Wörter); leer, solange keins kam. */
+  pub: string;
   state: RTCPeerConnectionState;
   muted: boolean;
 }
@@ -37,6 +39,8 @@ export class Mesh {
   private readonly links = new Map<string, PeerLinkLike>();
   private readonly pendingNames = new Map<string, string>();
   private readonly sids = new Map<string, string>();
+  /** peerId leitet sich aus dem Schlüssel ab, die Zuordnung bleibt also gültig, auch über Neuverbindungen. */
+  private readonly pubs = new Map<string, string>();
   private left = false;
   private muted = false;
   private readonly sid: string;
@@ -63,7 +67,7 @@ export class Mesh {
   }
 
   peers(): PeerView[] {
-    return [...this.links.values()].map((l) => ({ peerId: l.peerId, name: l.name, state: l.state, muted: l.remoteMuted }));
+    return [...this.links.values()].map((l) => ({ peerId: l.peerId, name: l.name, pub: this.pubs.get(l.peerId) ?? '', state: l.state, muted: l.remoteMuted }));
   }
 
   /** Eigener Stumm-Status; geht an alle Links und an später angelegte. */
@@ -121,7 +125,8 @@ export class Mesh {
     let link = this.links.get(p.from);
     switch (p.kind) {
       case 'hello': {
-        const { name, sid } = p.body as Bodies['hello'];
+        const { name, sid, pub } = p.body as Bodies['hello'];
+        this.pubs.set(p.from, pub);
         this.o.onHello?.(p.from, name);
         // Neue Sitzung derselben Identität (Neuladen oder Absturz ohne bye): Der alte Link ist tot, und das
         // Gegenüber kennt meinen Schlüssel nicht mehr. Also wie einen Neuen behandeln.

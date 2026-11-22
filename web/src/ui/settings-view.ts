@@ -2,10 +2,12 @@ import type { CaptureActivity } from '../audio/messages';
 import { listMics, micChoices } from '../audio/devices';
 import type { AudioSettings } from '../audio/settings';
 import type { Identity } from '../crypto/identity';
+import type { PeerView } from '../mesh/mesh';
 import { fingerprintWords } from '../crypto/words';
 import { mountBackupPanel, showBackupState } from './backup-panel';
 import type { UiPrefs } from './prefs';
 import { accentFor } from './theme';
+import { wordsOf } from './view';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -15,10 +17,15 @@ export interface SettingsOptions {
   /** null: kein Pegel verfügbar. */
   activity(): CaptureActivity | null;
   prefs(): UiPrefs;
-  setPrefs(p: Partial<UiPrefs>): void;
+  /** Vollständige Einstellungen; die Ansicht hält sie selbst, falls der Speicher nichts behält. */
+  setPrefs(p: UiPrefs): void;
   name(): string;
   setName(n: string): void;
   identity(): Identity | null;
+  /** Die Identität, mit der das laufende Gespräch signiert; außerhalb eines Gesprächs dieselbe wie identity(). */
+  identityInUse(): Identity | null;
+  /** Andere Teilnehmer des laufenden Gesprächs; leer außerhalb. */
+  peers(): PeerView[];
   /** Im Gespräch gilt ein neuer Name erst beim nächsten Beitritt. */
   inCall(): boolean;
   back(): void;
@@ -31,12 +38,14 @@ export interface SettingsView {
   refreshMics(): Promise<void>;
   /** Identität hat sich geändert (geladen, gesichert, aus einer Sicherung übernommen). */
   refreshIdentity(): void;
+  /** Teilnehmer haben sich geändert (Liste „Im Raum“ mit ihren Wörtern). */
+  refreshPeers(): void;
 }
 
 /** Farbton des Standardgrüns (#0f5c1a); steht auf dem Regler, solange keiner gewählt ist. */
 export const DEFAULT_HUE = 128;
 
-/** „tiger · anker · wolke · mond“ */
+/** „tiger · anker · blume · regen“ */
 export const wordsLine = (words: string[]): string => words.join(' · ');
 
 interface PreviewColors {
@@ -79,17 +88,24 @@ export function initSettings(o: SettingsOptions): SettingsView {
   let wordsFor: Identity | null = null;
   // Was zuletzt angestoßen wurde, damit die Bestätigung passt.
   let pending: 'backup' | 'restore' | null = null;
+  // Einstellungen im Speicher der Ansicht: Wirft localStorage, springen Regler und Knöpfe nicht auf Standard zurück.
+  let prefs: UiPrefs = o.prefs();
+  const setPrefs = (p: Partial<UiPrefs>) => {
+    prefs = { ...prefs, ...p };
+    o.setPrefs(prefs);
+  };
 
   const showThreshold = (t: number) => {
     $('vad-threshold-value').textContent = pct(t);
     mark.style.left = `${t * 100}%`;
   };
 
-  const renderPrefs = () => {
-    const p = o.prefs();
+  // Beim Ziehen am Farbton schreibt die Ansicht den Regler nicht zurück, sonst springt der Griff.
+  const renderPrefs = (fromHue = false) => {
+    const p = prefs;
     for (const t of THEMES) $(`theme-${t}`).setAttribute('aria-pressed', String(p.theme === t));
     const h = p.hue ?? DEFAULT_HUE;
-    hue.value = String(h);
+    if (!fromHue) hue.value = String(h);
     $('hue-value').textContent = `Farbton ${h}°`;
     const colors = previewColors(p.hue);
     for (const [id, c] of [['preview-light', colors.light], ['preview-dark', colors.dark]] as const) {
@@ -111,9 +127,12 @@ export function initSettings(o: SettingsOptions): SettingsView {
   };
 
   const renderIdentity = () => {
-    const id = o.identity();
+    const stored = o.identity();
+    const id = o.identityInUse();
     const words = $('my-words');
-    for (const b of ['settings-backup', 'settings-restore']) $<HTMLButtonElement>(b).disabled = !id;
+    for (const b of ['settings-backup', 'settings-restore']) $<HTMLButtonElement>(b).disabled = !stored;
+    // Im Gespräch geladene Sicherung: Das Gespräch signiert weiter mit dem alten Schlüssel, dessen Wörter bleiben stehen.
+    $('settings-restore-hint').hidden = !(o.inCall() && stored && id && stored.pub !== id.pub);
     if (!id) {
       wordsFor = null;
       words.textContent = '';
@@ -123,6 +142,31 @@ export function initSettings(o: SettingsOptions): SettingsView {
     wordsFor = id;
     void fingerprintWords(id.pub).then((w) => {
       if (wordsFor === id) words.textContent = wordsLine(w);
+    });
+  };
+
+  // Zum Vergleichen am Telefon: Name und vier Wörter jedes anderen im Gespräch (Spec §4, §7).
+  let peersToken = 0;
+  const renderPeerWords = () => {
+    const peers = o.inCall() ? o.peers().filter((p) => p.pub) : [];
+    $('room-words').hidden = peers.length === 0;
+    const token = ++peersToken;
+    void Promise.all(peers.map((p) => wordsOf(p.pub))).then((all) => {
+      if (token !== peersToken) return;
+      $('room-words-list').replaceChildren(
+        ...peers.map((p, i) => {
+          const li = document.createElement('li');
+          li.dataset.peer = p.peerId;
+          const name = document.createElement('span');
+          name.className = 'name';
+          name.textContent = p.name || 'Unbekannt';
+          const words = document.createElement('span');
+          words.className = 'words';
+          words.textContent = all[i];
+          li.append(name, words);
+          return li;
+        }),
+      );
     });
   };
 
@@ -149,19 +193,19 @@ export function initSettings(o: SettingsOptions): SettingsView {
 
   for (const t of THEMES) {
     $(`theme-${t}`).onclick = () => {
-      o.setPrefs({ theme: t });
+      setPrefs({ theme: t });
       renderPrefs();
     };
   }
   hue.oninput = () => {
-    o.setPrefs({ hue: Number(hue.value) });
-    renderPrefs();
+    setPrefs({ hue: Number(hue.value) });
+    renderPrefs(true);
   };
   $('hue-reset').onclick = () => {
-    o.setPrefs({ hue: null });
+    setPrefs({ hue: null });
     renderPrefs();
   };
-  $<HTMLInputElement>('auto-join').onchange = (e) => o.setPrefs({ autoJoin: (e.target as HTMLInputElement).checked });
+  $<HTMLInputElement>('auto-join').onchange = (e) => setPrefs({ autoJoin: (e.target as HTMLInputElement).checked });
 
   // Leer wird nicht übernommen: dann steht wieder der gespeicherte Name da.
   nameInput.onchange = () => {
@@ -188,6 +232,7 @@ export function initSettings(o: SettingsOptions): SettingsView {
       renderAudio();
       renderPrefs();
       renderIdentity();
+      renderPeerWords();
       nameInput.value = o.name();
       $('settings-name-hint').hidden = !o.inCall();
       done.hidden = true;
@@ -211,6 +256,9 @@ export function initSettings(o: SettingsOptions): SettingsView {
       else backup.hidden = true;
     },
     refreshMics,
+    refreshPeers() {
+      if (!$('settings').hidden) renderPeerWords();
+    },
     refreshIdentity() {
       renderIdentity();
       // Die Karte versteckt sich nach Erfolg selbst (gleich nach diesem Aufruf, daher Microtask);

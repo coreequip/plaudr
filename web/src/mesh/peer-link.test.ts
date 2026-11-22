@@ -171,4 +171,11 @@ describe('Kontrollkanal', () => {
     expect(link.remoteMuted).toBe(true);
     expect(remoteStates).toBe(1);
   });
+  test('wiederholter gleicher state meldet nichts', () => {
+    pc.channel.onmessage!({ data: '{"type":"state","muted":false}' });
+    expect(remoteStates).toBe(0);
+    pc.channel.onmessage!({ data: '{"type":"state","muted":true}' });
+    pc.channel.onmessage!({ data: '{"type":"state","muted":true}' });
+    expect(remoteStates).toBe(1);
+  });
 });

@@ -36,6 +36,14 @@ describe('noteJoin', () => {
 });
 
 describe('notePeers', () => {
+  test('merkt höchstens 8 Namen, jeden auf 40 Zeichen gekürzt', () => {
+    const r = noteJoin([], A, 1);
+    const names = Array.from({ length: 12 }, (_, i) => `${i}`.padEnd(100, 'x'));
+    const peers = notePeers(r, A, names)[0].peers;
+    expect(peers).toHaveLength(8);
+    expect(peers[0]).toBe('0'.padEnd(40, 'x'));
+    for (const p of peers) expect(p.length).toBeLessThanOrEqual(40);
+  });
   test('ersetzt die Namen des Raums', () => {
     const r = noteJoin([], A, 1);
     expect(notePeers(r, A, ['Anna', 'Bert'])[0].peers).toEqual(['Anna', 'Bert']);

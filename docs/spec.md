@@ -255,7 +255,10 @@ Erreichbar aus den Räumen und aus dem Gespräch (das Gespräch läuft weiter).
   frei, Sättigung und Helligkeit wählt plaudr so, dass Kontrast ≥ 4,5 : 1 bleibt.
   „Standardfarbe (Grün)“ setzt zurück. Gilt je Gerät.
 - **Identität:** Name (änderbar), 4 Wörter zum Vergleichen am Telefon (Abschnitt 4),
-  Schlüssel sichern, Sicherung laden.
+  Schlüssel sichern, Sicherung laden. Im Gespräch zusätzlich „Im Raum“: Name und 4 Wörter
+  jedes anderen Teilnehmers (auch als Tooltip am Namen seiner Karte). Eine im Gespräch
+  geladene Sicherung gilt erst ab dem nächsten Beitritt; bis dahin stehen die Wörter des
+  Schlüssels, mit dem das Gespräch signiert.
 - **Start:** zuletzt genutzten Raum automatisch betreten; im Desktop-Client zusätzlich
   „Beim Anmelden starten (im Tray)“.
 

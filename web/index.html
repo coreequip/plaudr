@@ -169,7 +169,7 @@
               <button id="theme-dark" aria-pressed="false">Dunkel</button>
             </div>
             <label for="hue" class="set-row set-label">Farbe <span id="hue-value" class="set-value">Farbton 128°</span></label>
-            <input id="hue" class="hue" type="range" min="0" max="360" step="1" aria-label="Farbton" />
+            <input id="hue" class="hue" type="range" min="0" max="359" step="1" aria-label="Farbton" />
             <div class="previews" aria-hidden="true">
               <div id="preview-light" class="preview"><span class="preview-label">Hell</span><span class="preview-button">Beitreten</span></div>
               <div id="preview-dark" class="preview"><span class="preview-label">Dunkel</span><span class="preview-button">Beitreten</span></div>
@@ -188,10 +188,15 @@
               <span id="my-words"></span>
               <span class="hint">Diese vier Wörter kannst du am Telefon vergleichen.</span>
             </div>
+            <div id="room-words" class="set-words" hidden>
+              <span class="section-label">IM RAUM</span>
+              <ul id="room-words-list"></ul>
+            </div>
             <div class="row">
               <button id="settings-backup" class="tall grow-1">Schlüssel sichern</button>
               <button id="settings-restore" class="tall grow-1">Sicherung laden</button>
             </div>
+            <span id="settings-restore-hint" class="hint" hidden>Gilt ab dem nächsten Beitritt.</span>
             <p id="settings-identity-done" class="set-done" role="status" hidden></p>
             <div id="backup-slot"></div>
           </section>

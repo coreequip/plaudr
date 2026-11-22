@@ -1,4 +1,5 @@
 import type { PeerView } from '../mesh/mesh';
+import { fingerprintWords } from '../crypto/words';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -56,11 +57,23 @@ export function initial(name: string): string {
   return first ? first.toLocaleUpperCase('de-DE') : '?';
 }
 
-/** Zustand einer Karte: stumm geschaltet vor spricht vor Verbindungszustand. */
+/**
+ * Zustandszeile einer Karte: Verbindungsprobleme zuerst (sonst sähe ein abgerissener, stummer Peer nur „stumm“),
+ * dann stumm geschaltet, dann spricht, sonst verbunden.
+ */
+export function peerStateText(s: { state: RTCPeerConnectionState; muted: boolean; speaking: boolean }): string {
+  if (s.state !== 'connected') return STATE_LABEL[s.state] ?? '';
+  if (s.muted) return 'stumm geschaltet';
+  if (s.speaking) return 'spricht';
+  return STATE_LABEL.connected;
+}
+
 function stateText(li: HTMLElement): string {
-  if (li.classList.contains('muted')) return 'stumm geschaltet';
-  if (li.classList.contains('speaking')) return 'spricht';
-  return STATE_LABEL[li.dataset.state as RTCPeerConnectionState] ?? '';
+  return peerStateText({
+    state: (li.dataset.state as RTCPeerConnectionState) ?? 'new',
+    muted: li.classList.contains('muted'),
+    speaking: li.classList.contains('speaking'),
+  });
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
@@ -70,40 +83,74 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: s
   return e;
 }
 
+/** Vier Wörter je Schlüssel, einmal berechnet (Tooltip am Namen und Liste in den Einstellungen). */
+const wordsCache = new Map<string, Promise<string>>();
+export function wordsOf(pub: string): Promise<string> {
+  let w = wordsCache.get(pub);
+  if (!w) {
+    w = fingerprintWords(pub).then((x) => x.join(' · '));
+    wordsCache.set(pub, w);
+  }
+  return w;
+}
+
+/** Neue Karte; Inhalt setzt updateCard. */
+function createCard(peerId: string): HTMLLIElement {
+  const li = document.createElement('li');
+  li.dataset.peer = peerId;
+  const avatar = el('span', 'avatar');
+  avatar.setAttribute('aria-hidden', 'true');
+  const text = el('span', 'peer-text');
+  text.append(el('span', 'name'), el('span', 'state'));
+  const volLabel = el('label', 'vol');
+  volLabel.innerHTML = SPEAKER;
+  const vol = document.createElement('input');
+  vol.type = 'range';
+  vol.min = '0';
+  vol.max = '1';
+  vol.step = '0.05';
+  vol.value = String(volumeOf(peerId));
+  vol.dataset.volume = '';
+  vol.oninput = () => setVolume(peerId, Number(vol.value));
+  volLabel.append(vol);
+  li.append(avatar, text, volLabel);
+  return li;
+}
+
+/** Aktualisiert eine Karte an Ort und Stelle; der Lautstärkeregler bleibt dasselbe Element, ein Ziehen läuft weiter. */
+function updateCard(li: HTMLLIElement, p: PeerView): void {
+  const label = p.name || 'Unbekannt';
+  li.dataset.state = p.state;
+  li.classList.toggle('muted', p.muted);
+  if (p.muted) li.classList.remove('speaking');
+  const setText = (sel: string, t: string) => {
+    const e = li.querySelector(sel)!;
+    if (e.textContent !== t) e.textContent = t;
+  };
+  setText('.avatar', initial(label));
+  setText('.name', label);
+  setText('.state', stateText(li));
+  li.querySelector('input[data-volume]')!.setAttribute('aria-label', `Lautstärke ${label}`);
+  const name = li.querySelector<HTMLElement>('.name')!;
+  if (!p.pub) return name.removeAttribute('title');
+  if (li.dataset.pub === p.pub) return;
+  li.dataset.pub = p.pub;
+  void wordsOf(p.pub).then((w) => {
+    if (li.dataset.pub === p.pub) name.title = w;
+  });
+}
+
 export function renderPeers(peers: PeerView[]): void {
   const list = $<HTMLUListElement>('peers');
-  // Sprechanzeige über das Neuzeichnen retten, sonst flackert der Rahmen bis zum nächsten Pegeltakt.
-  const speaking = new Set([...list.querySelectorAll<HTMLLIElement>('li.speaking')].map((li) => li.dataset.peer));
-  list.replaceChildren(
-    ...peers.map((p) => {
-      const label = p.name || 'Unbekannt';
-      const li = document.createElement('li');
-      li.dataset.peer = p.peerId;
-      li.dataset.state = p.state;
-      li.classList.toggle('muted', p.muted);
-      li.classList.toggle('speaking', !p.muted && speaking.has(p.peerId));
-      const avatar = el('span', 'avatar', initial(label));
-      avatar.setAttribute('aria-hidden', 'true');
-      const text = el('span', 'peer-text');
-      const state = el('span', 'state');
-      text.append(el('span', 'name', label), state);
-      const volLabel = el('label', 'vol');
-      volLabel.innerHTML = SPEAKER;
-      const vol = document.createElement('input');
-      vol.type = 'range';
-      vol.min = '0';
-      vol.max = '1';
-      vol.step = '0.05';
-      vol.value = String(volumeOf(p.peerId));
-      vol.dataset.volume = '';
-      vol.setAttribute('aria-label', `Lautstärke ${label}`);
-      vol.oninput = () => setVolume(p.peerId, Number(vol.value));
-      volLabel.append(vol);
-      li.append(avatar, text, volLabel);
-      state.textContent = stateText(li);
-      return li;
-    }),
-  );
+  const old = new Map([...list.querySelectorAll<HTMLLIElement>(':scope > li')].map((li) => [li.dataset.peer ?? '', li]));
+  const cards = peers.map((p) => {
+    const li = old.get(p.peerId) ?? createCard(p.peerId);
+    updateCard(li, p);
+    return li;
+  });
+  // Nur umhängen, wenn sich Menge oder Reihenfolge geändert hat; sonst bleiben alle Elemente, wo sie sind.
+  const same = cards.length === list.children.length && cards.every((li, i) => list.children[i] === li);
+  if (!same) list.replaceChildren(...cards);
   $('peer-count').textContent = `IM RAUM (${peers.length})`;
   $('alone').hidden = peers.length > 0;
 }

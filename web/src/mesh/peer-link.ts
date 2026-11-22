@@ -59,7 +59,8 @@ export class PeerLink implements PeerLinkLike {
     ctl.onopen = () => this.sendState();
     ctl.onmessage = (e) => {
       const m = parseCtl(e.data);
-      if (!m) return;
+      // Unverändert (etwa der Gleichstand beim Öffnen): nichts melden, sonst zeichnet die Liste ohne Grund neu.
+      if (!m || m.muted === this.remoteMuted) return;
       this.remoteMuted = m.muted;
       o.onRemoteState();
     };

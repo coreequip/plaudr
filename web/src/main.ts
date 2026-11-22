@@ -53,6 +53,10 @@ let tabLocked = false;
 /** Ein Beitritt hat in dieser Seite begonnen (höchstens einer je Seitenaufruf, auch während er noch lädt). */
 let inCall = false;
 let settingsView: SettingsView | null = null;
+/** Identität, mit der das laufende Gespräch signiert; eine im Gespräch geladene Sicherung gilt erst beim nächsten Beitritt. */
+let callIdentity: Identity | null = null;
+/** Andere Teilnehmer des laufenden Gesprächs, für die Wörter in den Einstellungen. */
+let callPeers: () => PeerView[] = () => [];
 /** Aufnahme des laufenden Gesprächs für die Einstellungen; null außerhalb eines Gesprächs. */
 let callAudio: {
   settings(): AudioSettings;
@@ -134,7 +138,18 @@ function prepareLobby(): Promise<void> {
       n.hidden = false;
       return;
     }
-    identity = await loadOrCreateIdentity(store);
+    try {
+      identity = await loadOrCreateIdentity(store);
+    } catch (err) {
+      // Etwa kein Ed25519 in WebCrypto: Lobby mit Hinweis, Beitreten bleibt aus.
+      console.warn('[plaudr] Identität nicht anlegbar', err);
+      const n = $('lobby-notice');
+      n.textContent = 'Dein Browser kann keinen Schlüssel anlegen. Probier einen aktuellen Browser.';
+      n.hidden = false;
+      updateJoinButton();
+      document.body.dataset.identity = 'failed';
+      return;
+    }
     if (!identity.persistent) {
       const n = $('lobby-notice');
       n.textContent = 'Deine Identität wird in diesem Browser nicht gespeichert.';
@@ -163,6 +178,7 @@ async function join(secret: string): Promise<void> {
   // Vor dem ersten await: ein zweiter Aufruf (Doppelklick, anderer Raum per Fragment) startet kein zweites Mesh.
   if (inCall || !name || !me) return;
   inCall = true;
+  callIdentity = me;
   closeTestCapture();
   saveName(name);
   $<HTMLButtonElement>('join').disabled = true;
@@ -196,6 +212,7 @@ async function join(secret: string): Promise<void> {
   const seen = new Set<string>();
   const onChange = (peers: PeerView[]) => {
     view.renderPeers(peers);
+    settingsView?.refreshPeers();
     const before = seen.size;
     for (const p of peers) if (p.name) seen.add(p.name);
     if (seen.size !== before) saveRooms(notePeers(loadRooms(), secret, [...seen]));
@@ -219,13 +236,23 @@ async function join(secret: string): Promise<void> {
     await capture?.update(p);
   };
   syncMuted();
+  callPeers = () => mesh.peers();
   mesh.start();
 
   if (capture?.needsGesture()) $('unmute-audio').hidden = false;
-  $('unmute-audio').onclick = () => {
+  const resumeAll = () => {
     view.resumeAllAudio();
     void capture?.resume();
   };
+  $('unmute-audio').onclick = resumeAll;
+  // Nach Auto-Beitritt ohne Geste: die erste Berührung oder Taste irgendwo reicht, nicht nur „Ton aktivieren“.
+  const onFirstGesture = () => {
+    removeEventListener('pointerdown', onFirstGesture, true);
+    removeEventListener('keydown', onFirstGesture, true);
+    resumeAll();
+  };
+  addEventListener('pointerdown', onFirstGesture, true);
+  addEventListener('keydown', onFirstGesture, true);
 
   const controls = initControls({ capture, settings: () => settings, setSettings });
   callAudio = { settings: () => settings, set: setSettings, activity: () => capture?.activity() ?? null, render: controls.render };
@@ -308,9 +335,8 @@ function boot(): void {
     activity: () => (callAudio ? callAudio.activity() : (testCapture?.activity() ?? null)),
     prefs: loadPrefs,
     setPrefs: (p) => {
-      const next = { ...loadPrefs(), ...p };
-      savePrefs(next);
-      applyTheme(next);
+      savePrefs(p);
+      applyTheme(p);
     },
     name: loadName,
     setName: (n) => {
@@ -318,6 +344,8 @@ function boot(): void {
       if (!inCall) $<HTMLInputElement>('name').value = n;
     },
     identity: () => identity,
+    identityInUse: () => callIdentity ?? identity,
+    peers: () => callPeers(),
     inCall: () => inCall,
     back: () => {
       closeSettings();
