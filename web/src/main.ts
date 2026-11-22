@@ -3,7 +3,8 @@ import RoomWS from 'roomws';
 import { ROOMWS_CHANNEL, ROOMWS_URL, TURN_URL } from './config';
 import { fetchIceServers } from './ice-servers';
 import { Mesh, type PeerView } from './mesh/mesh';
-import { buildLink, createRoomSecret, roomIdFor, secretFromHash } from './room/link';
+import { deriveRoom } from './crypto/room-keys';
+import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { Signaling } from './signaling/signaling';
 import * as view from './ui/view';
 
@@ -49,7 +50,8 @@ async function join(secret: string): Promise<void> {
   const [localStream, iceServers] = await Promise.all([openMicrophone(), fetchIceServers(TURN_URL)]);
   const drone = new RoomWS(ROOMWS_CHANNEL, { url: ROOMWS_URL });
   const selfId = crypto.randomUUID();
-  const signaling = new Signaling({ drone, roomId: roomIdFor(secret), selfId });
+  const { roomId } = await deriveRoom(secret);
+  const signaling = new Signaling({ drone, roomId, selfId });
   const mesh = new Mesh({
     signaling, selfId, name, localStream, iceServers,
     onTrack: view.attachAudio,

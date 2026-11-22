@@ -16,7 +16,3 @@ export function buildLink(origin: string, secret: string): string {
   return `${origin}/#${secret}`;
 }
 
-/** M1: Klartext-Raumname. M2 ersetzt das durch HKDF(secret, "plaudr/v1/room-id"). */
-export function roomIdFor(secret: string): string {
-  return 'plaudr-m1-' + secret;
-}
