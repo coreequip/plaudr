@@ -27,6 +27,8 @@ const pct = (v: number) => `${Math.round(v * 100)} %`;
 export interface Controls {
   /** Neu zeichnen, etwa nach Änderungen in den Einstellungen (Schwelle, Rauschunterdrückung). */
   render(): void;
+  /** Wie die Leertaste: Taste gedrückt oder losgelassen (globale Taste im Desktop). */
+  setPressed(p: boolean): void;
   unbind(): void;
 }
 
@@ -93,7 +95,8 @@ export function initControls(o: ControlsOptions): Controls {
   // Langes Drücken auf dem Telefon soll kein Kontextmenü und keine Textauswahl öffnen.
   ptt.oncontextmenu = (e) => e.preventDefault();
   // Die Leertaste bleibt reines Halten; ihr Loslassen löst auch eine eingerastete Taste.
-  const unbindKeys = bindPttKeys(window, (p) => (p ? apply(true) : (cancel(), apply(false))), isTyping, isPtt);
+  const press = (p: boolean) => (p ? apply(true) : (cancel(), apply(false)));
+  const unbindKeys = bindPttKeys(window, press, isTyping, isPtt);
   // Ohne echte Tastatur und Maus (Telefon, Tablet) gibt es keine Leertaste zu erwähnen.
   ptt.querySelector<HTMLElement>('.ptt-hint')!.hidden = !matchMedia('(hover: hover) and (pointer: fine)').matches;
 
@@ -106,5 +109,5 @@ export function initControls(o: ControlsOptions): Controls {
   });
 
   render();
-  return { render, unbind: unbindKeys };
+  return { render, setPressed: press, unbind: unbindKeys };
 }

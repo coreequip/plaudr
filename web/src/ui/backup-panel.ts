@@ -1,5 +1,6 @@
 import { BackupError, createBackup, MIN_PASSWORD_LENGTH, restoreBackup } from '../crypto/backup';
 import { identityFrom, type Identity, type IdentityStore } from '../crypto/identity';
+import type { Platform } from '../platform/platform';
 import { needsBackup } from '../room/join-rule';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -10,6 +11,7 @@ export interface BackupPanelOptions {
   setIdentity: (id: Identity) => void;
   /** Für den Dateinamen der Sicherung. */
   name: () => string;
+  platform: Platform;
 }
 
 /** Sicherung herunterladen und Sicherung laden, zuerst in der Lobby (Spec §4). */
@@ -60,7 +62,8 @@ export function initBackupPanel(o: BackupPanelOptions): void {
     busy(true);
     try {
       const current = o.identity();
-      download(await createBackup(current.stored, pw), fileName(o.name() || current.peerId.slice(0, 8)));
+      // Abgebrochene Dateiwahl (Desktop): nichts als gesichert markieren.
+      if (!(await o.platform.saveText(fileName(o.name() || current.peerId.slice(0, 8)), await createBackup(current.stored, pw)))) return;
       done(await persist(await identityFrom({ ...current.stored, backedUp: true }, current.persistent)));
     } catch (err) {
       console.warn('[plaudr] Sicherung fehlgeschlagen', err);
@@ -71,11 +74,21 @@ export function initBackupPanel(o: BackupPanelOptions): void {
   };
 
   $('restore-load').onclick = async () => {
-    const file = $<HTMLInputElement>('restore-file').files?.[0];
-    if (!file) return fail('Wähle zuerst die Sicherungsdatei.', restoreError);
+    // Im Browser steht das Dateifeld sichtbar da; ist es versteckt (Desktop), wählt die Plattform die Datei.
+    const input = $<HTMLInputElement>('restore-file');
     busy(true);
     try {
-      const stored = await restoreBackup(await file.text(), $<HTMLInputElement>('restore-pw').value);
+      let text: string;
+      if (input.hidden) {
+        const f = await o.platform.openText(['.plaudr-key']);
+        if (!f) return;
+        text = f.text;
+      } else {
+        const file = input.files?.[0];
+        if (!file) return fail('Wähle zuerst die Sicherungsdatei.', restoreError);
+        text = await file.text();
+      }
+      const stored = await restoreBackup(text, $<HTMLInputElement>('restore-pw').value);
       done(await persist(await identityFrom(stored, true)));
     } catch (err) {
       fail(err instanceof BackupError && err.reason === 'decrypt' ? 'Passwort falsch oder Datei beschädigt.' : 'Das ist keine plaudr-Sicherung.', restoreError);
@@ -97,13 +110,4 @@ export function mountBackupPanel(slot: HTMLElement): void {
 
 function fileName(base: string): string {
   return `plaudr-${base.replace(/[^\p{L}\p{N}_-]+/gu, '_')}.plaudr-key`;
-}
-
-function download(text: string, name: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

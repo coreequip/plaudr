@@ -12,7 +12,8 @@ import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
 import { autoJoinTarget } from './room/auto-join';
 import { canJoin, needsBackup } from './room/join-rule';
-import { loadRooms, noteJoin, notePeers, saveRooms } from './room/rooms';
+import { loadPlatform, type AppActions, type AppState, type Platform } from './platform/platform';
+import { loadRooms, noteJoin, notePeers, roomTitle, saveRooms } from './room/rooms';
 import { noteContact, type Contacts } from './room/contacts';
 import { acquireTabLock } from './room/tab-lock';
 import { Signaling, type SignalingStats } from './signaling/signaling';
@@ -64,6 +65,31 @@ let callAudio: {
   activity(): CaptureActivity | null;
   render(): void;
 } | null = null;
+
+// Plattform (Browser oder Desktop). Die Aktionen greifen auf das laufende Gespräch zu, sobald es eines gibt.
+let callActions: Pick<AppActions, 'setMode' | 'setPressed'> | null = null;
+let callLeave: (() => Promise<void>) | null = null;
+const appActions: AppActions = {
+  setMode: (m) => callActions?.setMode(m),
+  setPressed: (b) => callActions?.setPressed(b),
+  leave: async () => void (await callLeave?.()),
+};
+const platformReady: Promise<Platform> = loadPlatform(appActions);
+let platform: Platform | null = null;
+void platformReady.then((p) => {
+  platform = p;
+  if (lastState) p.update(lastState);
+});
+let lastState: AppState | null = null;
+/** Meldet den Zustand an die Plattform; erst nach dem Laden der Plattform, dann mit dem letzten Stand. */
+function pushState(s: AppState): void {
+  lastState = s;
+  try {
+    platform?.update(s);
+  } catch (err) {
+    console.warn('[plaudr] Plattform-Update fehlgeschlagen', err);
+  }
+}
 
 // Test-Aufnahme für den Pegel in den Einstellungen außerhalb eines Gesprächs. Der Zähler verwirft eine
 // Aufnahme, die erst nach dem Schließen fertig wird, damit das Mikrofon nicht an bleibt.
@@ -156,6 +182,7 @@ function prepareLobby(): Promise<void> {
       n.hidden = false;
     }
     initBackupPanel({
+      platform: await platformReady,
       store,
       identity: () => identity!,
       setIdentity: (id) => {
@@ -198,6 +225,14 @@ async function join(secret: string): Promise<void> {
   $('leave').onclick = $('back').onclick = () => location.assign(location.pathname);
 
   let settings = loadAudioSettings();
+  let peerCount = 0;
+  let sending = false;
+  const title = () => {
+    const e = loadRooms().find((r) => r.secret === secret);
+    return e ? roomTitle(e, Date.now()) : 'Raum';
+  };
+  const report = (inCallNow = true) =>
+    pushState({ inCall: inCallNow, roomTitle: inCallNow ? title() : null, peerCount: inCallNow ? peerCount : 0, mode: settings.mode, sending, hasMic: !!capture });
   const [capture, iceServers, { roomId, roomKey }] = await Promise.all([
     openCapture(settings),
     fetchIceServers(TURN_URL),
@@ -211,6 +246,8 @@ async function join(secret: string): Promise<void> {
   // Namen aller, die in dieser Sitzung da waren, für die Raumliste (auch wer schon wieder gegangen ist).
   const seen = new Set<string>();
   const onChange = (peers: PeerView[]) => {
+    peerCount = peers.length;
+    report();
     view.renderPeers(peers);
     settingsView?.refreshPeers();
     const before = seen.size;
@@ -234,6 +271,7 @@ async function join(secret: string): Promise<void> {
     saveAudioSettings(settings);
     if (p.mode !== undefined) syncMuted();
     await capture?.update(p);
+    if (p.mode !== undefined) report();
   };
   // Nach Auto-Beitritt ohne Geste: jede Berührung, jeder Klick, jede Taste versucht es, nicht nur „Ton aktivieren“.
   // pointerdown per Touch und manche Tasten (Escape) geben keine Nutzeraktivierung; deshalb pointerup und click,
@@ -272,6 +310,16 @@ async function join(secret: string): Promise<void> {
   mesh.start();
 
   const controls = initControls({ capture, settings: () => settings, setSettings });
+  callActions = {
+    setMode: (m) => void setSettings({ mode: m }).then(controls.render),
+    setPressed: controls.setPressed,
+  };
+  capture?.onActivity((a) => {
+    if (a.open === sending) return;
+    sending = a.open;
+    report();
+  });
+  report();
   callAudio = { settings: () => settings, set: setSettings, activity: () => capture?.activity() ?? null, render: controls.render };
   const speakingTimer = setInterval(() => view.markSpeaking(mesh.audioLevels()), 100);
   const stopDebug = initDebug({
@@ -283,11 +331,19 @@ async function join(secret: string): Promise<void> {
   });
 
   // „‹“ und „Verlassen“ tun dasselbe: raus aus dem Raum, zurück zu den Räumen (ohne Fragment, also kein Auto-Beitritt).
+  let left: Promise<void> | null = null;
+  const leaveCall = () =>
+    (left ??= (async () => {
+      clearInterval(speakingTimer);
+      stopDebug();
+      capture?.close();
+      sending = false;
+      report(false);
+      await mesh.leave();
+    })());
+  callLeave = leaveCall;
   const leave = async () => {
-    clearInterval(speakingTimer);
-    stopDebug();
-    capture?.close();
-    await mesh.leave();
+    await leaveCall();
     location.assign(location.pathname);
   };
   $('leave').onclick = $('back').onclick = () => void leave();
