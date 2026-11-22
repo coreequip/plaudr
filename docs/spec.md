@@ -239,7 +239,7 @@ Sonst führt Beitreten direkt ins Gespräch.
   „stumm geschaltet“, „spricht“), Lautstärkeregler; grüner Rahmen beim Sprechen.
 - Unten: Modus-Umschalter **Automatisch · Push-to-Talk · Stumm**. Bei Automatisch ein
   Pegelbalken (eigene Sprachwahrscheinlichkeit) mit Strich an der Schwelle und
-  „Schwelle 85 %“; bei Push-to-Talk ein großer Halteknopf mit Tastenhinweis.
+  „Schwelle 85 %“; bei Push-to-Talk ein großer Knopf: halten sendet bis zum Loslassen, kurz antippen (unter 300 ms) rastet ein bis zum nächsten Antippen (fürs Telefon); Moduswechsel, Leertaste loslassen oder Tab im Hintergrund lösen immer. Der Hinweis auf die Leertaste erscheint nur mit Maus und Tastatur; langes Drücken öffnet weder Textauswahl noch Kontextmenü.
   Dazu Rauschunterdrückung und „Verlassen“.
 - Kann der Browser ohne Nutzergeste kein Audio starten (Auto-Beitritt, geöffneter
   Link), erscheint „Ton aktivieren“; der Klick startet Wiedergabe und Aufnahme.

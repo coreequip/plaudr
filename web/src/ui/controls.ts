@@ -1,5 +1,6 @@
 import type { Capture } from '../audio/pipeline';
 import { bindPttKeys } from '../audio/ptt-keys';
+import { PttButton } from './ptt-button';
 import type { AudioSettings } from '../audio/settings';
 import type { SpeakMode } from '../audio/gate';
 
@@ -29,6 +30,8 @@ export interface Controls {
   unbind(): void;
 }
 
+const HOLD_LABEL = 'Zum Sprechen halten oder antippen';
+
 /** Sprechmodus, Pegel mit Schwelle (nur Anzeige, der Regler steht in den Einstellungen), PTT, Rauschunterdrückung. */
 export function initControls(o: ControlsOptions): Controls {
   const { capture } = o;
@@ -41,6 +44,7 @@ export function initControls(o: ControlsOptions): Controls {
     for (const m of MODES) $(`mode-${m}`).setAttribute('aria-pressed', String(s.mode === m));
     // Ohne Mikrofon gibt es weder Pegel noch etwas zum Halten.
     $('ptt').hidden = !capture || s.mode !== 'ptt';
+    if (s.mode !== 'ptt') cancel();
     $('vad-meter').hidden = !capture || s.mode !== 'vad';
     showThreshold(s.threshold);
     $<HTMLInputElement>('denoise').checked = s.denoise;
@@ -58,19 +62,40 @@ export function initControls(o: ControlsOptions): Controls {
   $<HTMLInputElement>('denoise').onchange = (e) => void o.setSettings({ denoise: (e.target as HTMLInputElement).checked });
 
   const isPtt = () => o.settings().mode === 'ptt';
-  // Loslassen immer durchreichen, auch wenn der Modus inzwischen gewechselt hat.
   const ptt = $<HTMLButtonElement>('ptt');
-  const setPressed = (p: boolean) => {
+  const label = ptt.querySelector<HTMLElement>('.ptt-label')!;
+  // Loslassen immer durchreichen, auch wenn der Modus inzwischen gewechselt hat.
+  const apply = (p: boolean) => {
     if (p && !isPtt()) return;
     capture?.setPressed(p);
     ptt.classList.toggle('active', p);
   };
+  const button = new PttButton(apply);
+  // Einrasten ist kein Wechsel von gedrückt/losgelassen, darum die Anzeige nach jeder Bedienung nachziehen.
+  const showLatch = () => {
+    ptt.setAttribute('aria-pressed', String(button.latched));
+    label.textContent = button.latched ? 'Du sprichst. Antippen zum Beenden.' : HOLD_LABEL;
+  };
+  const cancel = () => {
+    button.cancel();
+    showLatch();
+  };
   ptt.onpointerdown = (e) => {
     ptt.setPointerCapture(e.pointerId);
-    setPressed(true);
+    if (isPtt()) button.down();
+    showLatch();
   };
-  ptt.onpointerup = ptt.onpointercancel = () => setPressed(false);
-  const unbindKeys = bindPttKeys(window, setPressed, isTyping, isPtt);
+  ptt.onpointerup = () => {
+    button.up();
+    showLatch();
+  };
+  ptt.onpointercancel = cancel;
+  // Langes Drücken auf dem Telefon soll kein Kontextmenü und keine Textauswahl öffnen.
+  ptt.oncontextmenu = (e) => e.preventDefault();
+  // Die Leertaste bleibt reines Halten; ihr Loslassen löst auch eine eingerastete Taste.
+  const unbindKeys = bindPttKeys(window, (p) => (p ? apply(true) : (cancel(), apply(false))), isTyping, isPtt);
+  // Ohne echte Tastatur und Maus (Telefon, Tablet) gibt es keine Leertaste zu erwähnen.
+  ptt.querySelector<HTMLElement>('.ptt-hint')!.hidden = !matchMedia('(hover: hover) and (pointer: fine)').matches;
 
   const me = $('me-speaking');
   const level = $('vad-level');

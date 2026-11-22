@@ -96,6 +96,23 @@ test.describe('Bedienung', () => {
     await a.keyboard.up('Space');
     await b.waitForTimeout(1000);
     expect(await maxLevel(b, aId, 1500)).toBeLessThan(0.005);
+
+    // Kurz antippen rastet ein (fürs Telefon), erneutes Antippen beendet.
+    await a.click('#ptt');
+    await expect(a.locator('#ptt')).toHaveAttribute('aria-pressed', 'true');
+    await expect(a.locator('#ptt .ptt-label')).toHaveText('Du sprichst. Antippen zum Beenden.');
+    expect(await maxLevel(b, aId, 2500)).toBeGreaterThan(0.01);
+    await a.click('#ptt');
+    await expect(a.locator('#ptt')).toHaveAttribute('aria-pressed', 'false');
+    await b.waitForTimeout(1000);
+    expect(await maxLevel(b, aId, 1500)).toBeLessThan(0.005);
+
+    // Eingerastet und Modus gewechselt: sofort Schluss.
+    await a.click('#ptt');
+    await expect(a.locator('#ptt')).toHaveAttribute('aria-pressed', 'true');
+    await a.click('#mode-muted');
+    await a.click('#mode-ptt');
+    await expect(a.locator('#ptt')).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('Modus bleibt über Neuladen erhalten', async ({ browser }) => {
