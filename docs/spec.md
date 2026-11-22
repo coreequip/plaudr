@@ -1,6 +1,6 @@
 # plaudr: Spezifikation
 
-Stand: 2026-11-21
+Stand: 2026-11-22
 
 ## 1. Ziel
 
@@ -53,7 +53,7 @@ Der room_ws-Client (`roomws.js`) wird als Abhängigkeit eingebunden, nicht kopie
   - `roomId = hex(HKDF(S, info="plaudr/v1/room-id", 32 Byte))`: room_ws-Raumname
   - `roomKey = HKDF(S, info="plaudr/v1/room-key")` als AES-256-GCM-Schlüssel
 - Raum „neu erzeugen“ = neues `S`, neuer Link; der alte Raum ist damit verlassen.
-- Bekannte Räume speichert der Client lokal mit selbst gewähltem Namen.
+- Bekannte Räume speichert der Client lokal mit selbst gewähltem Namen (Abschnitt 7).
 
 Folge des Modells: Ein weitergegebener Link ist ein gültiger Zutritt. Gegenmittel sind
 sichtbare Teilnehmerliste, lokales Blockieren (Abschnitt 5) und Raum neu erzeugen.
@@ -153,7 +153,10 @@ mit Burst 40 pro Client. Die ICE-Bündelung hält einen Beitritt mit 3 Peers bei
 
 Pro Peer ein ausgehandelter DataChannel `ctl` (`negotiated: true, id: 0`, geordnet,
 zuverlässig) für: Stumm-Status, „spricht gerade“, Namensänderung, RTT-Ping.
-Er existiert von Anfang an, damit Dateitransfer (Abschnitt 9) ohne neues Signaling
+Nachrichten sind JSON-Objekte mit `type`; unbekannte Typen werden ignoriert. Umgesetzt ist
+`{"type":"state","muted":true|false}`: beim Öffnen des Kanals und bei jedem Wechsel;
+`muted` heißt Modus Stumm oder kein Mikrofon.
+Er existiert von Anfang an, damit Dateitransfer (Abschnitt 10) ohne neues Signaling
 weitere Kanäle öffnen kann.
 
 ### Opus
@@ -185,7 +188,7 @@ getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false,
 | Modus | Verhalten |
 |---|---|
 | Push-to-Talk | Gate offen, solange Taste gedrückt; 150 ms Nachlauf nach Loslassen |
-| Sprachaktivierung | Öffnen bei VAD > Schwelle (einstellbar, Standard 0,85); Schließen nach 400 ms unter Schwelle; 200 ms Vorlauf-Puffer, damit Silbenanfänge nicht abgeschnitten werden |
+| Sprachaktivierung (UI: „Automatisch“) | Öffnen bei VAD > Schwelle (einstellbar, Standard 0,85); Schließen nach 400 ms unter Schwelle; 200 ms Vorlauf-Puffer, damit Silbenanfänge nicht abgeschnitten werden |
 | Stumm | Gate zu |
 
 Das Gate sitzt **im Worklet**: Die Kette läuft immer, Öffnen wirkt sofort. Bei
@@ -194,7 +197,7 @@ Das Gate kostet 200 ms Latenz nur im Moment des Einsetzens, wenn der Vorlauf-Puf
 abgespielt wird: Abwägung gegen abgeschnittene Anfänge, im Debug-Panel abschaltbar.
 
 **PTT-Taste:** im Browser nur bei fokussiertem Tab (`keydown`/`keyup`, Standard: Leertaste
-außerhalb von Eingabefeldern). Im Desktop-Client global (Abschnitt 7).
+außerhalb von Eingabefeldern). Im Desktop-Client global (Abschnitt 8).
 
 ### Messwerte
 
@@ -202,7 +205,65 @@ Debug-Panel aus `getStats()`: RTT, Jitter, `jitterBufferDelay`, Paketverlust,
 Kandidatentyp (host/srflx/relay) pro Peer. Ziel: unter 120 ms Mund-zu-Ohr bei
 direkter Verbindung.
 
-## 7. Desktop-Client (Tauri 2.x)
+## 7. Bedienung
+
+Gestaltung nach dem UI-Mock (6 Bildschirme, Fenster 400 × 780; im Browser dieselben
+Bildschirme, höchstens 32 rem breit). Texte deutsch, duzen, keine Gedankenstriche.
+
+### Deine Räume (Startbildschirm)
+
+- Liste der betretenen Räume, neueste zuerst. Gespeichert lokal (`localStorage`
+  `plaudr.rooms`): Raumgeheimnis, eigener Name (optional), erster und letzter Beitritt,
+  Namen der zuletzt gesehenen Teilnehmer. Der Server sieht nie einen Raumnamen.
+- Anzeige: eigener Name, sonst „Raum vom <Tag>“ (Tag des ersten Beitritts, z. B.
+  „Raum vom 3. November“, mit Jahr, wenn nicht im laufenden). Darunter letzter Beitritt
+  („heute“, „gestern“, sonst Datum) und die zuletzt gesehenen Namen.
+- Je Eintrag: Beitreten, Umbenennen (Name leer = kein Name), Aus der Liste entfernen.
+- Unten: „Neuen Raum erstellen“ und ein Feld „Einladungslink einfügen“ mit „Öffnen“
+  (nimmt den ganzen Link oder nur das Geheimnis).
+- **Auto-Beitritt:** Beim ersten Laden einer Browsersitzung betritt plaudr den zuletzt
+  genutzten Raum sofort, wenn das in den Einstellungen an ist (Standard: an). Nach
+  „Verlassen“ oder Neuladen nicht erneut.
+
+### Erster Start
+
+Name und Schlüsselsicherung (Abschnitt 4) erscheinen nur, solange etwas fehlt: kein
+Name gespeichert, Sicherung ausstehend oder plaudr schon in einem anderen Tab offen.
+Sonst führt Beitreten direkt ins Gespräch.
+
+### Gespräch
+
+- Kopfzeile: „‹“ (verlässt das Gespräch, zurück zu den Räumen), Raumname mit Stift
+  zum Umbenennen, Knopf „Link kopieren“ nur als Icon (Tooltip), Einstellungen.
+- Teilnehmerkarten: Initiale, Name, Zustand („verbindet …“, „verbunden“,
+  „stumm geschaltet“, „spricht“), Lautstärkeregler; grüner Rahmen beim Sprechen.
+- Unten: Modus-Umschalter **Automatisch · Push-to-Talk · Stumm**. Bei Automatisch ein
+  Pegelbalken (eigene Sprachwahrscheinlichkeit) mit Strich an der Schwelle und
+  „Schwelle 85 %“; bei Push-to-Talk ein großer Halteknopf mit Tastenhinweis.
+  Dazu Rauschunterdrückung und „Verlassen“.
+- Kann der Browser ohne Nutzergeste kein Audio starten (Auto-Beitritt, geöffneter
+  Link), erscheint „Ton aktivieren“; der Klick startet Wiedergabe und Aufnahme.
+
+### Einstellungen
+
+Erreichbar aus den Räumen und aus dem Gespräch (das Gespräch läuft weiter).
+- **Push-to-Talk:** im Browser Leertaste bei fokussiertem Fenster (Hinweis); im
+  Desktop-Client globale Taste aufnehmen, ohne Vorgabe (Abschnitt 8).
+- **Mikrofon:** Eingabegerät (wird gemerkt, fehlt es, gilt das Standardgerät),
+  Schwelle für „Automatisch“ in Prozent (50 bis 99 %) mit Live-Pegel, Rauschunterdrückung.
+- **Darstellung:** System, Hell oder Dunkel; Farbton 0 bis 360°. Nur der Farbton ist
+  frei, Sättigung und Helligkeit wählt plaudr so, dass Kontrast ≥ 4,5 : 1 bleibt.
+  „Standardfarbe (Grün)“ setzt zurück. Gilt je Gerät.
+- **Identität:** Name (änderbar), 4 Wörter zum Vergleichen am Telefon (Abschnitt 4),
+  Schlüssel sichern, Sicherung laden.
+- **Start:** zuletzt genutzten Raum automatisch betreten; im Desktop-Client zusätzlich
+  „Beim Anmelden starten (im Tray)“.
+
+### Tray-Menü (Desktop)
+
+Raum und Modus als Kopf, Stumm, Automatisch, Fenster zeigen, Verlassen, Beenden.
+
+## 8. Desktop-Client (Tauri 2.x)
 
 Entscheidung für Tauri 2 nach Spike gegen Wails v3 (`docs/spike-desktop.md`):
 etwa ein Drittel der Größe (ca. 1,5 MB Download), ausgereifte Plugins für globale
@@ -231,7 +292,7 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
 - Vor M4 ein Prototyp: Mikrofon unter Windows (WebView2), globale PTT-Taste mit
   Loslassen auf beiden Plattformen, notarisierte macOS-Build.
 
-## 8. Web-Auslieferung
+## 9. Web-Auslieferung
 
 - Statisch über GitHub Pages unter `plaudr.room.ws` (eigenes Repo bzw. Pages-Workflow,
   `CNAME`). Bewusst **nicht** auf der Oracle-VM: Wer die Seite ausliefert, kann die
@@ -241,7 +302,7 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
   script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; media-src 'self' blob:`
 - Installierbar als PWA (Manifest, Service Worker), auch gegen Safaris Speicherlöschung.
 
-## 9. Phase 2: Dateitransfer
+## 10. Phase 2: Dateitransfer
 
 Direkt nach dem MVP. Nur zwischen gerade verbundenen Teilnehmern, über WebRTC.
 
@@ -255,18 +316,19 @@ Direkt nach dem MVP. Nur zwischen gerade verbundenen Teilnehmern, über WebRTC.
 - Fortschritt, Abbruch beidseitig; kein Fortsetzen nach Verbindungsabbruch im ersten Schritt.
 - Verschlüsselung: DTLS des DataChannels, an die Identität gebunden wie bei Audio.
 
-## 10. Meilensteine
+## 11. Meilensteine
 
 | # | Inhalt | Fertig, wenn |
 |---|---|---|
 | M1 | Gerüst, room_ws-Anbindung, Mesh mit Klartext-Signaling | 3 Browser-Tabs hören sich gegenseitig |
 | M2 | Raumlink, HKDF, Umschläge, Ed25519, SDP-Bindung | manipulierter Fingerprint wird abgewiesen (Test) |
 | M3 | Audiokette, RNNoise, PTT, VAD, Opus-Tuning, Debug-Panel | Latenz und VAD im Zweiergespräch geprüft |
+| M3b | Bedienung nach Mock (Abschnitt 7) | alle Bildschirme im Browser bedienbar, E2E grün |
 | M4 | Tauri Windows + macOS, globale PTT-Taste, Tray | Installer für beide Plattformen |
 | M5 | GitHub Pages, CSP, PWA | `plaudr.room.ws` live |
 | P2 | Dateitransfer | Datei > 1 GB zwischen Browser und Desktop übertragen |
 
-## 11. Tests
+## 12. Tests
 
 - **Vitest:** HKDF-Ableitungen (feste Testvektoren), Umschlag ver-/entschlüsseln,
   Signaturprüfung, Replay- und Zuordnungsregeln, SDP-fmtp-Anpassung, VAD-Gate-Zustände.
@@ -274,7 +336,7 @@ Direkt nach dem MVP. Nur zwischen gerade verbundenen Teilnehmern, über WebRTC.
   gegen ein lokales room_ws (`go run`), prüft Verbindungsaufbau, Abbau bei
   `member_leave` und Abweisung eines gefälschten Offers.
 
-## 12. Offene Punkte
+## 13. Offene Punkte
 
 - **Windows-Code-Signing:** ohne Zertifikat SmartScreen-Warnung; für den kleinen Kreis
   vorerst hingenommen.
