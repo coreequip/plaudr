@@ -55,6 +55,9 @@ für den Benutzer ein. Ein zweiter Start reicht Link und Argumente an die laufen
 
 Prüfpunkte von Hand: [docs/m4-handprobe.md](docs/m4-handprobe.md).
 
+Release-Builds für macOS und Windows baut CI (Tag `desktop-v<Version>`); Signatur, Notarisierung und die
+nötigen Secrets: [docs/release.md](docs/release.md).
+
 ## Lizenz
 
 Copyright (C) 2026 core.equip

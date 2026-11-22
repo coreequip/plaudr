@@ -1,0 +1,161 @@
+name: Desktop
+
+# Nur bei einem Release-Tag (desktop-v0.1.0) oder von Hand, nie bei jedem Push auf main.
+# Tag: baut und legt einen Release-Entwurf mit DMG, .app.tar.gz und NSIS-Installer an.
+# Von Hand (workflow_dispatch): baut nur und lädt die Bündel als Workflow-Artefakte hoch.
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS 15 statt neuer: Das DMG-Bundling scheitert auf macOS 27 (hdiutil create veraltet).
+          - runner: macos-15
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles app,dmg
+            bundle-dir: desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - runner: windows-latest
+            rust-targets: x86_64-pc-windows-msvc
+            args: --bundles nsis
+            bundle-dir: desktop/src-tauri/target/release/bundle
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Tag passt zur App-Version
+        if: github.ref_type == 'tag'
+        run: |
+          version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "desktop-v${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} passt nicht zur Version ${version} in tauri.conf.json"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@1.98
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - run: npm ci
+        working-directory: web
+      - run: npm ci
+        working-directory: desktop
+
+      # Signiert und notarisiert wird nur, wenn alle sechs Secrets gesetzt sind. Leere Variablen
+      # reichen der Tauri-CLI nicht als „nicht gesetzt“, daher landen sie nur dann in der Umgebung.
+      - name: Signatur einrichten (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=""
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -z "$missing" ]; then
+            for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              {
+                echo "$name<<PLAUDR_EOF"
+                echo "${!name}"
+                echo "PLAUDR_EOF"
+              } >> "$GITHUB_ENV"
+            done
+            echo "Signatur mit Developer-ID und Notarisierung aktiv."
+          else
+            # "-" = ad-hoc: Bündel versiegelt, Hardened Runtime und Entitlements aktiv, aber ohne Developer-ID.
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "::warning title=Nicht signiert::Secrets fehlen:${missing}. Build ist nur ad-hoc signiert und nicht notarisiert, siehe docs/release.md."
+          fi
+
+      - uses: tauri-apps/tauri-action@v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: plaudr __VERSION__
+          releaseBody: Entwurf aus ${{ github.ref_name }}. Hinweise zur Installation in docs/release.md.
+          releaseDraft: true
+          prerelease: false
+          uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
+
+      # Grenze 5 MB (5 000 000 Bytes). Das Universal-.app enthält beide Architekturen und ist daher
+      # etwa doppelt so groß; geprüft wird das .app so, wie es auf einem Mac je Architektur ankommt
+      # (ohne die jeweils andere Hälfte der Binärdatei), dazu der Download (DMG bzw. Installer).
+      - name: Größenprüfung
+        env:
+          BUNDLE_DIR: ${{ matrix.bundle-dir }}
+        run: |
+          limit=5000000
+          fail=0
+          bytes() { find "$1" -type f -print0 | xargs -0 cat | wc -c | tr -d ' '; }
+          check() { # $1 = Bezeichnung, $2 = Bytes
+            printf '%-40s %10s Bytes\n' "$1" "$2" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ "$2" -gt "$limit" ]; then
+              echo "::error::$1 ist mit $2 Bytes größer als $limit Bytes"
+              fail=1
+            fi
+          }
+          files() { # $1 = Glob-Muster; fehlt die Datei, schlägt die Prüfung fehl
+            found=0
+            for f in $1; do
+              [ -f "$f" ] || continue
+              found=1
+              check "$(basename "$f")" "$(wc -c < "$f" | tr -d ' ')"
+            done
+            [ "$found" = 1 ] || { echo "::error::Nicht gefunden: $1"; fail=1; }
+          }
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            app="$BUNDLE_DIR/macos/plaudr.app"
+            bin="$app/Contents/MacOS/plaudr"
+            total=$(bytes "$app")
+            fat=$(wc -c < "$bin" | tr -d ' ')
+            printf '%-40s %10s Bytes\n' "plaudr.app (universal)" "$total" | tee -a "$GITHUB_STEP_SUMMARY"
+            for arch in $(lipo -archs "$bin"); do
+              lipo "$bin" -thin "$arch" -output "$RUNNER_TEMP/plaudr-$arch"
+              slice=$(wc -c < "$RUNNER_TEMP/plaudr-$arch" | tr -d ' ')
+              check "plaudr.app ($arch)" $((total - fat + slice))
+            done
+            files "$BUNDLE_DIR/dmg/*.dmg"
+            codesign -dv --entitlements - "$app" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            files "desktop/src-tauri/target/release/plaudr.exe"
+            files "$BUNDLE_DIR/nsis/*-setup.exe"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $fail

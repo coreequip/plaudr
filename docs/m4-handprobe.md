@@ -99,4 +99,20 @@ Ein gültiges Geheimnis: im Browser einen Raum erstellen und den Teil nach `#` n
 | 44 | Windows | App beendet, wie 43 | App startet und betritt den Raum | |
 | 45 | Windows | wie 36, 37 (zweiter Start von `plaudr.exe`), 39 bis 42 (Autostart über den Registry-Eintrag `HKCU\…\Run`) | wie dort | |
 
+## Release-Build aus CI (nach Task 6)
+
+Artefakte aus dem Workflow „Desktop“ (`docs/release.md`), nicht der lokale Bau. Unter macOS zeigt nur die
+signierte und notarisierte Fassung, ob die Hardened Runtime das Mikrofon freigibt; die ad-hoc-signierte
+läuft ebenfalls mit Hardened Runtime und Entitlements und ist ein guter Vortest.
+
+| # | Plattform | Prüfung | Erwartung | Ergebnis |
+|---|---|---|---|---|
+| 46 | macOS | `plaudr_<Version>_universal.dmg` öffnen, App in „Programme“ ziehen, starten | signiert: startet ohne Gatekeeper-Warnung (`spctl -a -vv /Applications/plaudr.app` meldet „Notarized Developer ID“); ad-hoc: erst nach `xattr -dr com.apple.quarantine` | |
+| 47 | macOS | Raum betreten, Gespräch gegen den Browser-Tab | Mikrofonabfrage einmal, das Gegenüber hört dich (Entitlement `com.apple.security.device.audio-input` wirkt) | |
+| 48 | macOS | Intel-Mac oder `arch -x86_64 /Applications/plaudr.app/Contents/MacOS/plaudr` | App läuft auch als x86_64 (Universal-Bündel) | |
+| 49 | Windows | `plaudr_<Version>_x64-setup.exe` ausführen | SmartScreen warnt („Der Computer wurde durch Windows geschützt“), über „Weitere Informationen“ › „Trotzdem ausführen“ geht es weiter; Installation ohne Adminrechte, Eintrag im Startmenü | |
+| 50 | Windows | Installation auf einem Rechner ohne WebView2-Runtime (etwa Windows 10 ohne Edge-Update) | Installer lädt die Runtime nach (Bootstrapper), danach startet plaudr | |
+| 51 | Windows | Punkte 7 bis 9 und 43 mit der installierten App | wie dort; `plaudr://` ist nach dem ersten Start eingetragen | |
+| 52 | Windows | Deinstallation über „Apps“ in den Einstellungen | App und Startmenü-Eintrag sind weg | |
+
 Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.
