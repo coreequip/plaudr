@@ -49,6 +49,13 @@
       "desktop": {
         "schemes": ["plaudr"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0MEE4RTE4N0VDRTUxRTcKUldUblVjNStHSTRLaEVWUTYwcDJweUZYTUxFQVovOFZCZ2tSZ1FhRG5tbnlTVDU3empxckdCZ1QK",
+      "endpoints": ["https://github.com/coreequip/plaudr/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

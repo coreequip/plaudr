@@ -222,3 +222,7 @@ button.link-button { align-self: flex-start; min-height: 36px; padding: 0; borde
 /* Desktop: Sicherungsdatei über den nativen Dialog, Name der gewählten Datei daneben. */
 .restore-pick { align-items: center; }
 .restore-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; color: var(--muted); }
+
+/* Desktop: Hinweis auf ein Update auf dem Startbildschirm. */
+.update-card { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+#update-text { font-weight: 600; font-size: 0.9rem; }

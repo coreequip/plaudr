@@ -1,7 +1,8 @@
 name: Desktop
 
 # Nur bei einem Release-Tag (desktop-v0.1.0) oder von Hand, nie bei jedem Push auf main.
-# Tag: baut und legt einen Release-Entwurf mit DMG, .app.tar.gz und NSIS-Installer an.
+# Tag: baut und legt einen Release-Entwurf mit DMG, .app.tar.gz, NSIS-Installer, Update-Signaturen (.sig)
+# und latest.json an. Erst das Veröffentlichen des Entwurfs liefert das Update an die Apps aus.
 # Von Hand (workflow_dispatch): baut nur und lädt die Bündel als Workflow-Artefakte hoch.
 on:
   push:
@@ -100,12 +101,41 @@ jobs:
             echo "::warning title=Nicht signiert::Secrets fehlen:${missing}. Build ist nur ad-hoc signiert und nicht notarisiert, siehe docs/release.md."
           fi
 
+      # Update-Artefakte (.app.tar.gz bzw. setup.exe mit .sig, dazu latest.json) brauchen den Signaturschlüssel
+      # des Updaters. Bei einem Tag ist er Pflicht, sonst käme ein Release ohne latest.json heraus und die Apps
+      # bekämen das Update nie. Von Hand (etwa in einem Fork ohne Secrets) geht es ohne, dann ohne Update-Artefakte.
+      - name: Update-Signatur einrichten
+        id: updater
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
+              {
+                echo "$name<<PLAUDR_EOF"
+                echo "${!name}"
+                echo "PLAUDR_EOF"
+              } >> "$GITHUB_ENV"
+            done
+            echo "args=--config src-tauri/tauri.release.conf.json" >> "$GITHUB_OUTPUT"
+            echo "enabled=1" >> "$GITHUB_OUTPUT"
+            echo "Update-Artefakte werden signiert."
+          elif [ "$IS_TAG" = "true" ]; then
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY fehlt; ohne ihn kein latest.json, siehe docs/release.md."
+            exit 1
+          else
+            echo "::warning title=Ohne Updates::Secret TAURI_SIGNING_PRIVATE_KEY fehlt, Build ohne Update-Artefakte."
+          fi
+
       - uses: tauri-apps/tauri-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop
-          args: ${{ matrix.args }}
+          # --config ist relativ zu projectPath; latest.json lädt tauri-action selbst hoch (uploadUpdaterJson, Standard).
+          args: ${{ matrix.args }} ${{ steps.updater.outputs.args }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: plaudr __VERSION__
           releaseBody: Entwurf aus ${{ github.ref_name }}. Hinweise zur Installation in docs/release.md.
@@ -119,6 +149,7 @@ jobs:
       - name: Größenprüfung
         env:
           BUNDLE_DIR: ${{ matrix.bundle-dir }}
+          UPDATER: ${{ steps.updater.outputs.enabled }}
         run: |
           limit=5000000
           fail=0
@@ -152,10 +183,15 @@ jobs:
               check "plaudr.app ($arch)" $((total - fat + slice))
             done
             files "$BUNDLE_DIR/dmg/*.dmg"
+            if [ "$UPDATER" = 1 ]; then
+              files "$BUNDLE_DIR/macos/*.app.tar.gz"
+              files "$BUNDLE_DIR/macos/*.app.tar.gz.sig"
+            fi
             codesign -dv --entitlements - "$app" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           else
             files "desktop/src-tauri/target/release/plaudr.exe"
             files "$BUNDLE_DIR/nsis/*-setup.exe"
+            [ "$UPDATER" = 1 ] && files "$BUNDLE_DIR/nsis/*-setup.exe.sig"
           fi
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $fail

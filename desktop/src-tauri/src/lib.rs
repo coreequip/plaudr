@@ -74,7 +74,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         // Globale Push-to-Talk-Taste; belegt und abgemeldet wird sie vom Web-Code (platform/desktop.ts).
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        // exit(0) aus der WebView, nachdem sie den Raum verlassen hat.
+        // Updates: geprüft und installiert wird aus der WebView (platform/updater.ts), nie im Gespräch.
+        // Unter Windows beendet der NSIS-Installer die App ohne RunEvent::Exit; den Raum verlässt die
+        // WebView daher vor dem Installieren selbst.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // exit(0) aus der WebView, nachdem sie den Raum verlassen hat; relaunch() nach einem Update.
         .plugin(tauri_plugin_process::init());
 
     // macOS: Cmd+Q beendet sonst sofort (terminate:), ohne dass die WebView den Raum verlassen kann.

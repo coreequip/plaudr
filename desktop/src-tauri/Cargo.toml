@@ -30,10 +30,15 @@ serde_json = "=1.0.154"
 # Einzelinstanz gibt es nur auf dem Desktop; mit deep-link reicht eine zweite Instanz ihren Link weiter.
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = { version = "=2.5.5", features = ["deep-link"] }
+# Updates aus den GitHub-Releases, signiert mit dem Schlüssel des Maintainers (docs/release.md).
+# TLS vom System (Security.framework, SChannel) statt rustls: spart gut 1 MB, sonst reißt das .app 5 MB.
+# Ohne „zip“: Das brauchen nur die alten .nsis.zip-Artefakte; createUpdaterArtifacts: true lädt die setup.exe.
+tauri-plugin-updater = { version = "=2.14.1", default-features = false, features = ["native-tls", "system-proxy"] }
 
 [profile.release]
-# Auf Größe optimiert, siehe docs/spike-desktop.md.
-opt-level = "s"
+# Auf Größe optimiert, siehe docs/spike-desktop.md. "z" statt "s", seit der Updater dazukam: Mit "s" lag
+# das .app für x86_64 über 5 MB. Rust treibt hier nur Fenster, Tray und Plugins, der Ton läuft in der WebView.
+opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"

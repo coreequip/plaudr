@@ -31,6 +31,9 @@ declare global {
       written: string | null;
       /** Wie tauri-plugin-deep-link: Ein Link landet in getCurrent (bleibt über ein Neuladen) und als Ereignis. */
       openUrl(urls: string[]): void;
+      /** Version, die tauri-plugin-updater bei check meldet (null = kein Update), und die Zahl der Prüfungen. */
+      update: string | null;
+      checks: number;
     };
   }
 }
@@ -41,7 +44,7 @@ declare global {
  * Fenster und Beenden, die der Test bedient.
  * Im Browser ohne diese Attrappe bleibt alles beim Alten (Tests oben).
  */
-function fakeTauri(opts?: { startLinks?: string[] }): void {
+function fakeTauri(opts?: { startLinks?: string[]; update?: string }): void {
   const callbacks = new Map<number, (m: unknown) => void>();
   const handlers = new Map<string, { id: number; index: number }>();
   let next = 1;
@@ -95,6 +98,8 @@ function fakeTauri(opts?: { startLinks?: string[] }): void {
       sessionStorage.setItem('fake.deepLink', JSON.stringify(urls));
       app.emit('deep-link://new-url', urls);
     },
+    update: opts?.update ?? null,
+    checks: 0,
   };
   window.fakeApp = app;
   // getCurrent: der Startlink, nach einem weiteren Link dieser (das Plugin merkt sich den letzten im Prozess).
@@ -215,6 +220,17 @@ function fakeTauri(opts?: { startLinks?: string[] }): void {
         case 'plugin:process|exit':
           app.exitCode = args.code as number;
           app.calls.push('exit');
+          return null;
+        case 'plugin:process|restart':
+          app.calls.push('restart');
+          return null;
+        case 'plugin:updater|check':
+          app.checks++;
+          return app.update && { rid: next++, currentVersion: '0.1.0', version: app.update, date: null, body: null, rawJson: {} };
+        case 'plugin:updater|download_and_install':
+          app.calls.push('updater|download_and_install');
+          return null;
+        case 'plugin:resources|close':
           return null;
       }
       throw `unbekannter Befehl ${cmd}`;
@@ -649,4 +665,51 @@ test('Desktop: Sicherung über native Dialoge speichern und laden', async ({ bro
   await expect(b.locator('#backup')).toBeHidden();
   await join(b, 'Anna');
   expect(await b.evaluate(() => window.plaudr!.selfId)).toBe(id);
+});
+
+test('Desktop: Update auf dem Startbildschirm, Knopf installiert und startet neu', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri, { update: '0.2.0' });
+  await page.goto('/');
+  await expect(page.locator('#start')).toBeVisible();
+  await expect(page.locator('#update-text')).toHaveText('Neue Version 0.2.0 verfügbar.');
+  const button = page.locator('#update-install');
+  await expect(button).toHaveText('Jetzt aktualisieren');
+  // Bis zum Klick wird nichts geladen.
+  expect(await page.evaluate(() => window.fakeApp!.calls)).not.toContain('updater|download_and_install');
+
+  await button.click();
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.calls)).toEqual(['updater|download_and_install', 'restart']);
+  await expect(button).toBeDisabled();
+});
+
+test('Desktop: ohne Update kein Hinweis', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri);
+  await page.goto('/');
+  await expect(page.locator('#start')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.checks)).toBe(1);
+  await expect(page.locator('#update')).toHaveCount(0);
+});
+
+test('Desktop: im Gespräch kein Hinweis und keine Installation, nach dem Verlassen wieder', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.clock.install();
+  await page.addInitScript(fakeTauri, { update: '0.2.0' });
+  await page.goto('/' + roomHash('desktopupdate'));
+  await expect.poll(() => page.evaluate(() => window.fakeApp!.checks)).toBe(1);
+  await join(page, 'Anna');
+  await expect(page.locator('#update')).toHaveCount(0);
+
+  // Die Prüfung nach 6 h fällt ins Gespräch: keine Prüfung, kein Hinweis.
+  await page.clock.fastForward('06:00:01');
+  await expect(page.locator('#call')).toBeVisible();
+  expect(await page.evaluate(() => window.fakeApp!.checks)).toBe(1);
+  await expect(page.locator('#update')).toHaveCount(0);
+  expect(await page.evaluate(() => window.fakeApp!.calls)).not.toContain('updater|download_and_install');
+
+  await page.click('#leave');
+  await expect(page.locator('#start')).toBeVisible();
+  await expect(page.locator('#update-text')).toHaveText('Neue Version 0.2.0 verfügbar.');
+  expect(await page.evaluate(() => window.fakeApp!.calls)).not.toContain('updater|download_and_install');
 });

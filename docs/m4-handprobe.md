@@ -115,4 +115,22 @@ läuft ebenfalls mit Hardened Runtime und Entitlements und ist ein guter Vortest
 | 51 | Windows | Punkte 7 bis 9 und 43 mit der installierten App | wie dort; `plaudr://` ist nach dem ersten Start eingetragen | |
 | 52 | Windows | Deinstallation über „Apps“ in den Einstellungen | App und Startmenü-Eintrag sind weg | |
 
+## Updates (nach Task 7)
+
+Braucht zwei veröffentlichte Releases aus dem Workflow (`docs/release.md`, Abschnitt Updates), mit den
+Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Ablauf: `desktop-v0.1.0`
+taggen, Entwurf veröffentlichen, 0.1.0 auf beiden Systemen installieren; dann Version auf 0.1.1 anheben,
+`desktop-v0.1.1` taggen und den Entwurf zunächst liegen lassen.
+
+| # | Plattform | Prüfung | Erwartung | Ergebnis |
+|---|---|---|---|---|
+| 53 | beide | Release-Entwurf 0.1.1 ansehen | enthält `latest.json` mit `version` 0.1.1 und den Plattformen `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`; je eine `.sig` zu `.app.tar.gz` und `-setup.exe` | |
+| 54 | beide | 0.1.1 noch Entwurf; plaudr 0.1.0 starten | kein Hinweis auf dem Startbildschirm (`releases/latest` ist noch 0.1.0) | |
+| 55 | beide | Entwurf 0.1.1 veröffentlichen (nicht als Pre-Release), plaudr 0.1.0 neu starten | Startbildschirm zeigt „Neue Version 0.1.1 verfügbar.“ und „Jetzt aktualisieren“ | |
+| 56 | beide | wie 55, aber plaudr startet per Auto-Beitritt direkt ins Gespräch | im Gespräch kein Hinweis, nichts wird geladen; nach „Verlassen“ erscheint der Hinweis | |
+| 57 | macOS | „Jetzt aktualisieren“ | Knopf gesperrt, nach kurzer Zeit startet plaudr neu; „About plaudr“ im App-Menü zeigt 0.1.1, Identität, Räume und PTT-Taste sind noch da, kein neuer Hinweis | |
+| 58 | Windows | „Jetzt aktualisieren“ | plaudr beendet sich, der Installer läuft ohne Rückfragen (passiv, Fortschrittsfenster) und startet plaudr neu; „Apps“ in den Windows-Einstellungen zeigt 0.1.1, Tray-Symbol nur einmal, Identität und Räume sind noch da | |
+| 59 | beide | ohne Netz starten | kein Hinweis, keine Fehlermeldung; in der Web-Konsole nur eine Warnung „Suche nach Updates fehlgeschlagen“ | |
+| 60 | macOS | ad-hoc-signierte Fassung: nach dem Update Raum betreten | ggf. erneute Mikrofonabfrage (neue ad-hoc-Signatur), danach Ton wie in 47 | |
+
 Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.

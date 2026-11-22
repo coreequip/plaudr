@@ -7,7 +7,8 @@ import { getCurrent as currentLinks, onOpenUrl } from '@tauri-apps/plugin-deep-l
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
-import { exit } from '@tauri-apps/plugin-process';
+import { exit, relaunch } from '@tauri-apps/plugin-process';
+import { check as checkUpdate } from '@tauri-apps/plugin-updater';
 import macIdlePng from '../../../desktop/src-tauri/icons/tray-mac@2x.png?inline';
 import macSendingPng from '../../../desktop/src-tauri/icons/tray-mac-sending@2x.png?inline';
 import winIdlePng from '../../../desktop/src-tauri/icons/tray-win.png?inline';
@@ -19,6 +20,7 @@ import { createPttShortcut, loadDesktopPrefs, saveDesktopPrefs } from './desktop
 import { activeShortcutLabel, detectOs, type AppActions, type AppState, type Autostart, type Platform } from './platform';
 import { GlobalPtt, type ShortcutApi } from './shortcut';
 import { trayModel, type TrayItemId, type TrayModel } from './tray-model';
+import { startUpdater, UPDATE_BUTTON, updateText } from './updater';
 import { webPlatform } from './web';
 
 /** Anbindung an tauri-plugin-global-shortcut. Nur dieser Chunk darf @tauri-apps laden. */
@@ -64,7 +66,7 @@ function pngBytes(dataUrl: string): number[] {
 
 /**
  * Desktop-Client: globale Push-to-Talk-Taste, Tray, Fenster schließen in den Tray, plaudr://-Links,
- * Autostart und die Sicherungsdatei über native Dialoge.
+ * Autostart, die Sicherungsdatei über native Dialoge und Updates.
  */
 export function desktopPlatform(actions: AppActions): Platform {
   const web = webPlatform();
@@ -204,6 +206,40 @@ export function desktopPlatform(actions: AppActions): Platform {
     })
     .catch((err) => console.warn('[plaudr] Startlink nicht lesbar', err));
 
+  // Updates: Hinweis mit Knopf auf dem Startbildschirm, nie im Gespräch. Installiert wird erst auf Klick.
+  const updater = startUpdater({
+    check: checkUpdate,
+    relaunch,
+    // Der Gesprächsbildschirm steht schon, bevor main.ts den ersten Zustand meldet (Mikrofon, TURN).
+    inCall: () => !!state?.inCall || document.getElementById('call')?.hidden === false,
+    leave: leaveAtMost,
+    show: showUpdate,
+    busy: (on) => {
+      const b = document.querySelector<HTMLButtonElement>('#update-install');
+      if (b) b.disabled = on;
+    },
+  });
+  function showUpdate(version: string | null): void {
+    let card = document.getElementById('update');
+    if (!version) return void card?.remove();
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'update';
+      card.className = 'card update-card';
+      card.setAttribute('role', 'status');
+      const text = document.createElement('span');
+      text.id = 'update-text';
+      const button = document.createElement('button');
+      button.id = 'update-install';
+      button.className = 'primary';
+      button.textContent = UPDATE_BUTTON;
+      button.onclick = () => void updater.install();
+      card.append(text, button);
+      document.querySelector('#start > header')?.after(card);
+    }
+    card.querySelector('#update-text')!.textContent = updateText(version);
+  }
+
   return {
     ...web,
     kind: 'desktop',
@@ -228,6 +264,7 @@ export function desktopPlatform(actions: AppActions): Platform {
       // Moduswechsel oder Gespräch verlassen: Die Taste darf nicht „gedrückt“ hängen bleiben.
       if (!s.inCall || s.mode !== 'ptt') ptt.release();
       tray.update(s);
+      updater.refresh();
     },
   };
 }
