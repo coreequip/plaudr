@@ -285,8 +285,10 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
     `https://plaudr.room.ws/#…`-Links
   - optional Autostart
   - Sicherungsdatei über den nativen Speichern- und Öffnen-Dialog statt Browser-Download
-- Origin: Windows `http://tauri.localhost` → in `ROOMWS_ALLOWED_ORIGINS` aufnehmen;
-  macOS `tauri://localhost` ist über `localhost` bereits erlaubt.
+- Origin: macOS `tauri://localhost`, Windows `http://tauri.localhost`. Beide sind ohne
+  Änderung an der VM erlaubt: room_ws trägt `localhost` fest in die Freigabeliste ein
+  (`newHub`, per Admin-Befehl nicht entfernbar), und `isAllowed` akzeptiert neben dem
+  Hostnamen selbst jede Unterdomäne (Endung `.localhost`). Das gilt auch für `/turn` (CORS).
 - macOS: `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`; signiert mit
   Developer-ID-Zertifikat und notarisiert (Apple-Developer-Konto vorhanden).
   DMG-Bundling scheitert auf macOS 27 (`hdiutil create` veraltet): in CI auf einem

@@ -1,0 +1,27 @@
+[package]
+name = "plaudr"
+version = "0.1.0"
+description = "Ende-zu-Ende-verschlüsselte Sprachkonferenz für kleine Runden"
+authors = []
+license = "AGPL-3.0-only"
+repository = "https://github.com/coreequip/plaudr"
+edition = "2021"
+
+[lib]
+# Eigener Name, damit sich Bibliothek und Binary unter Windows nicht ins Gehege kommen.
+name = "plaudr_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.5", features = [] }
+
+[profile.release]
+# Auf Größe optimiert, siehe docs/spike-desktop.md.
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

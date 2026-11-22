@@ -18,6 +18,31 @@ npx vitest run     # Unit-Tests
 npx playwright test  # Ende-zu-Ende-Tests (startet lokal room_ws per Go und Chromium)
 ```
 
+## Desktop-App bauen
+
+Die Desktop-App (Tauri 2) bündelt den Build aus `web/` und lädt nie die Live-Seite. Voraussetzungen:
+Rust (stable), Node.js und ein eingerichtetes `web/` (`npm ci` dort, siehe oben).
+
+```sh
+cd desktop
+npm ci
+npm run dev        # App mit dem Vite-Dev-Server aus web/
+npm run build      # baut web/ und danach plaudr.app (macOS)
+```
+
+Ergebnis unter `desktop/src-tauri/target/release/bundle/macos/plaudr.app`. Das DMG-Bundling scheitert
+auf macOS 27 (`hdiutil create` veraltet), daher baut `npm run build` nur das `.app`-Bündel.
+
+Windows lässt sich von macOS aus mit [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
+übersetzen (vorher `npm --prefix web run build`):
+
+```sh
+cd desktop/src-tauri
+cargo xwin build --release --target x86_64-pc-windows-msvc
+```
+
+Prüfpunkte von Hand: [docs/m4-handprobe.md](docs/m4-handprobe.md).
+
 ## Lizenz
 
 Copyright (C) 2026 core.equip
