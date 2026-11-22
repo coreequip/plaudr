@@ -29,6 +29,8 @@ export interface PttShortcut {
   set(accel: string | null): Promise<{ ok: boolean }>;
   /** Wird nach jeder Änderung aufgerufen, auch wenn die Registrierung beim Start erst später fertig wird. */
   onChange(cb: () => void): void;
+  /** Erfüllt, sobald die gespeicherte Taste beim Start belegt (oder als vergeben erkannt) ist. */
+  readonly ready: Promise<void>;
 }
 
 export interface Platform {

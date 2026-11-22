@@ -124,4 +124,11 @@ describe('Globale Taste im Desktop', () => {
     expect(await k.set('KeyP')).toEqual({ ok: false });
     expect(t.registered.size).toBe(0);
   });
+  test('solange die Startregistrierung läuft, gilt die Taste nicht als vergeben', async () => {
+    const f = fake('{"pttShortcut":"Alt+Space"}');
+    const k = createPttShortcut(new GlobalPtt(tasten(['Alt+Space']).api, () => {}, () => true), 'mac', f.storage);
+    expect(k.registered()).toBe(true);
+    await k.ready;
+    expect(k.registered()).toBe(false);
+  });
 });

@@ -128,6 +128,17 @@ test('Desktop: Taste aufnehmen, ungültig, vergeben, entfernen', async ({ browse
   await expect.poll(() => page.evaluate(() => window.fakeShortcut!.registered)).toEqual(['Alt+Space']);
 });
 
+test('Desktop: gespeicherte Taste beim Start vergeben, Hinweis in den Einstellungen', async ({ browser }) => {
+  const page = await (await newContext(browser)).newPage();
+  await page.addInitScript(fakeTauri);
+  await page.addInitScript(() => localStorage.setItem('plaudr.desktop', JSON.stringify({ pttShortcut: 'Alt+KeyB' })));
+  await desktopSettings(page);
+  await expect(page.locator('#ptt-key')).toHaveText('Alt+B');
+  await expect(page.locator('#ptt-key-error')).toHaveText('Diese Taste ist schon vergeben. Nimm eine andere.');
+  expect(await page.evaluate(() => window.fakeShortcut!.registered)).toEqual([]);
+  expect(await stored(page)).toBe('Alt+KeyB');
+});
+
 test('Desktop: globale Taste sendet nur im Push-to-Talk, Moduswechsel löst', async ({ browser }) => {
   const ctx = await newContext(browser);
   const page = await ctx.newPage();

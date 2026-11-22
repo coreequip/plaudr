@@ -37,17 +37,22 @@ export function createPttShortcut(
   ptt: GlobalPtt,
   os: Platform['os'],
   storage?: Storage,
-): PttShortcut & { ready: Promise<void> } {
+): PttShortcut {
   let wanted = loadDesktopPrefs(storage).pttShortcut;
   const listeners: (() => void)[] = [];
   const changed = () => {
     for (const l of listeners) l();
   };
-  const ready = (wanted ? ptt.set(wanted) : Promise.resolve({ ok: true })).then(changed);
+  // Bis die Startregistrierung fertig ist, ist „vergeben“ noch nicht bekannt; solange gilt die Taste als wirksam.
+  let settled = false;
+  const ready = (wanted ? ptt.set(wanted) : Promise.resolve({ ok: true })).then(() => {
+    settled = true;
+    changed();
+  });
   return {
     ready,
     current: () => wanted,
-    registered: () => ptt.current === wanted,
+    registered: () => !settled || ptt.current === wanted,
     label: (a) => shortcutLabel(a, os),
     async set(accel) {
       await ready;

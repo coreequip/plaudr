@@ -329,6 +329,11 @@ export function initSettings(o: SettingsOptions): SettingsView {
       renderPeerWords();
       showKeyError(null);
       renderPtt();
+      // Beim Start von einem anderen Programm belegt: Die Taste bleibt gespeichert, wirkt aber nicht.
+      const k = o.pttShortcut();
+      void k?.ready.then(() => {
+        if (!$('settings').hidden && !stopRecording && k.current() && !k.registered()) showKeyError(PTT_TAKEN);
+      });
       nameInput.value = o.name();
       $('settings-name-hint').hidden = !o.inCall();
       done.hidden = true;

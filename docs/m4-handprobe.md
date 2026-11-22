@@ -48,7 +48,9 @@ angepasst werden. Die Einstellungs-Oberfläche selbst ist per E2E mit nachgebaut
 | 14 | macOS | Kürzel aufnehmen, das eine andere laufende App global belegt hat (etwa ein Launcher oder Bildschirmfoto-Programm) | „Diese Taste ist schon vergeben. Nimm eine andere.“, die bisherige Taste bleibt und wirkt weiter | |
 | 15 | macOS | App beenden und neu starten | Taste steht wieder in den Einstellungen und wirkt ohne neues Aufnehmen | |
 | 16 | macOS | Taste halten und im Gespräch auf „Automatisch“ wechseln; in „Automatisch“ die Taste drücken | Wechsel beendet das Senden sofort; in „Automatisch“ bewirkt die Taste nichts | |
-| 17 | Windows | wie 11 (Alt+Leertaste, Anzeige „Alt+Leertaste“) | wie 11 | |
-| 18 | Windows | wie 12 bis 16 | wie 12 bis 16 | |
+| 17 | macOS | Im Gespräch per Link in einen anderen Raum wechseln (Seite lädt neu) | Globale Taste wirkt weiter | |
+| 18 | macOS | Fenster in den Tray geschickt bzw. minimiert | Globale Taste wirkt weiter | |
+| 19 | Windows | wie 11 (Alt+Leertaste, Anzeige „Alt+Leertaste“) | wie 11 | |
+| 20 | Windows | wie 12 bis 18 | wie 12 bis 18 | |
 
 Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.

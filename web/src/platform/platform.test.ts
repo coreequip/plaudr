@@ -27,6 +27,7 @@ describe('Plattform', () => {
       label: (a) => `<${a}>`,
       set: async () => ({ ok: true }),
       onChange: () => {},
+      ready: Promise.resolve(),
     });
     expect(activeShortcutLabel(null)).toBeNull();
     expect(activeShortcutLabel({})).toBeNull();
