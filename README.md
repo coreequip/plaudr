@@ -1,7 +1,7 @@
 # plaudr
 
 Ende-zu-Ende-verschlüsselte Sprachkonferenz für kleine Runden (3 bis 4 Personen), im Browser unter
-<https://plaudr.room.ws> und später als schlanker Desktop-Client für Windows und macOS. Keine Accounts:
+<https://plaudr.room.ws> und als schlanker Desktop-Client für Windows und macOS. Keine Accounts:
 Wer den Link hat, ist dabei. Signaling über [room_ws](https://github.com/coreequip/room_ws), Audio direkt
 zwischen den Teilnehmern per WebRTC.
 
@@ -31,7 +31,9 @@ npm run build      # baut web/ und danach plaudr.app (macOS)
 ```
 
 Ergebnis unter `desktop/src-tauri/target/release/bundle/macos/plaudr.app`. Das DMG-Bundling scheitert
-auf macOS 27 (`hdiutil create` veraltet), daher baut `npm run build` nur das `.app`-Bündel.
+auf macOS 27 (`hdiutil create` veraltet), daher baut `npm run build` lokal nur das `.app`-Bündel; das DMG
+entsteht in CI. Lokal gebaute Apps sind ad-hoc signiert; wenn macOS sie blockiert:
+`xattr -dr com.apple.quarantine plaudr.app`.
 
 Windows lässt sich von macOS aus mit [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
 übersetzen (vorher `npm --prefix web run build`):
@@ -53,10 +55,14 @@ Links `plaudr://raum#<Geheimnis>` öffnen die App. macOS kennt das Schema, sobal
 gestartet (oder mit `lsregister -f` eingetragen) wurde; unter Windows trägt die App es bei jedem Start
 für den Benutzer ein. Ein zweiter Start reicht Link und Argumente an die laufende App weiter.
 
-Prüfpunkte von Hand: [docs/m4-handprobe.md](docs/m4-handprobe.md).
+Prüfpunkte von Hand (Handprobe auf echten Systemen): [docs/m4-handprobe.md](docs/m4-handprobe.md).
 
-Release-Builds für macOS und Windows baut CI (Tag `desktop-v<Version>`); Signatur, Notarisierung und die
-nötigen Secrets: [docs/release.md](docs/release.md).
+Release-Builds baut der GitHub-Workflow „Desktop“: macOS als Universal-DMG (signiert und notarisiert, wenn
+die Apple-Secrets gesetzt sind, sonst ad-hoc), Windows als NSIS-Installer (unsigniert, SmartScreen warnt).
+Er läuft bei einem Tag `desktop-v<Version>` oder von Hand; gewöhnliche Pushes lösen ihn nicht aus. Die
+Artefakte eines Laufs lädst du über die Actions-Seite oder `gh run download <Lauf-ID>`. Die App
+aktualisiert sich selbst aus dem jeweils neuesten veröffentlichten Release. Signatur, Notarisierung,
+Update-Schlüssel und Secrets: [docs/release.md](docs/release.md).
 
 ## Lizenz
 

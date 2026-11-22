@@ -2,24 +2,34 @@
 
 Was die automatischen Prüfungen nicht abdecken: Systemabfragen, echte Mikrofone, das Gespräch
 zwischen Desktop-App und Browser und Plattformeigenheiten von WebKit (macOS) und WebView2 (Windows).
-Die Ergebnisse fließen in die Spec (§8) und in STATUS.md zurück.
+Die Ergebnisse fließen in die Spec (§8) zurück.
 
 ## Vorbereitung
 
-- macOS: `cd desktop && npm ci && npm run build`, dann
-  `desktop/src-tauri/target/release/bundle/macos/plaudr.app` starten. Ad-hoc-signiert: Nach jedem
-  Neubau kann macOS erneut nach dem Mikrofon fragen.
-- Windows: `cd desktop/src-tauri && cargo xwin build --release --target x86_64-pc-windows-msvc`,
-  `target/x86_64-pc-windows-msvc/release/plaudr.exe` auf den Windows-Rechner kopieren und starten
-  (WebView2-Runtime muss vorhanden sein, ab Windows 11 vorinstalliert).
+Einen Build bekommst du auf zwei Wegen.
+
+- **Aus CI (empfohlen für Installation und Update):** Im Repository unter Actions den letzten Lauf des
+  Workflows „Desktop“ (`.github/workflows/desktop.yml`) öffnen und die Artefakte laden, oder
+  `gh run download <Lauf-ID>`. Sie enthalten das DMG und `.app.tar.gz` für macOS sowie den Installer
+  `plaudr_<Version>_x64-setup.exe` für Windows. Mehr dazu in `docs/release.md`.
+- **Lokal:** `cd desktop && npm ci && npm run build` ergibt unter macOS
+  `desktop/src-tauri/target/release/bundle/macos/plaudr.app` (nur `.app`, ein DMG baut CI).
+  Für Windows: `cd desktop/src-tauri && cargo xwin build --release --target x86_64-pc-windows-msvc`,
+  `target/x86_64-pc-windows-msvc/release/plaudr.exe` auf den Windows-Rechner kopieren (WebView2-Runtime
+  muss vorhanden sein, ab Windows 11 vorinstalliert).
+
+Ad-hoc-signierte Apps (lokal gebaut, oder aus CI ohne Apple-Secrets) blockiert Gatekeeper, sobald sie
+heruntergeladen wurden. Nach dem Kopieren nach „Programme“:
+`xattr -dr com.apple.quarantine /Applications/plaudr.app`. Nach jedem Neubau kann macOS erneut nach dem
+Mikrofon fragen.
+
 - Gegenstelle: ein Browser-Tab auf <https://plaudr.room.ws>, auf einem zweiten Gerät oder mit Kopfhörern.
-- Konsole der WebView: macOS per Rechtsklick „Element untersuchen“ geht nur im Debug-Build
+- Konsole der WebView: Rechtsklick „Element untersuchen“ geht nur im Debug-Build
   (`npm run tauri build -- --debug --bundles app`); unter Windows ebenso.
 
-## Prototyp
+## Prototyp (macOS und Windows)
 
-Stand des Builds: Task 1 von M4 (Gerüst ohne Plattformschicht). Größen beim Bau: `.app` 3,2 MB
-(gezippt 1,6 MB), `.exe` 3,1 MB (gezippt 1,3 MB).
+Grundfunktion der App in der echten WebView. Zeilen 1 bis 6 gelten für macOS, 7 bis 10 für Windows.
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
 |---|---|---|---|---|
@@ -34,10 +44,10 @@ Stand des Builds: Task 1 von M4 (Gerüst ohne Plattformschicht). Größen beim B
 | 9 | Windows | Gespräch gegen den Browser-Tab | Verbindung kommt zustande (Origin `http://tauri.localhost` wird über die Endung `.localhost` angenommen), beide hören sich | |
 | 10 | Windows | Punkte 4 und 5 wiederholen | wie unter macOS | |
 
-## Globale Taste (nach Task 3)
+## Globale Taste (PTT)
 
-Kommt unter einem System kein Loslassen an, ist Push-to-Talk dort nicht sicher nutzbar und der Plan muss
-angepasst werden. Die Einstellungs-Oberfläche selbst ist per E2E mit nachgebautem Tauri geprüft
+Kommt unter einem System kein Loslassen an, ist Push-to-Talk dort nicht sicher nutzbar; für Windows ist
+ein Rückfall noch nicht gebaut und wäre dann zu entscheiden (Spec §8). Unter Windows sind 19 und 20 die wichtigste Probe. Die Einstellungs-Oberfläche selbst ist per E2E mit nachgebautem Tauri geprüft
 (`web/e2e/desktop.spec.ts`); offen ist, was nur das echte System zeigt.
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
@@ -53,7 +63,7 @@ angepasst werden. Die Einstellungs-Oberfläche selbst ist per E2E mit nachgebaut
 | 19 | Windows | wie 11 (Alt+Leertaste, Anzeige „Alt+Leertaste“) | wie 11 | |
 | 20 | Windows | wie 12 bis 18 | wie 12 bis 18 | |
 
-## Tray, Fenster schließen, Beenden (nach Task 4)
+## Tray, Fenster schließen, Beenden
 
 Menü, Fenster und Beenden sind per E2E mit nachgebautem Tauri geprüft (`web/e2e/desktop.spec.ts`); offen
 ist, wie das echte System Symbol und Menü zeigt und ob das Gegenüber beim echten Beenden sofort Bescheid
@@ -75,12 +85,12 @@ bekommt. Gegenstelle für 26 bis 29: ein Browser-Tab im selben Raum (die Gnadenf
 | 32 | Windows | wie 24 bis 27 (Schließen mit X oder Alt+F4) | wie 24 bis 27 | |
 | 33 | Windows | Im Gespräch abmelden oder herunterfahren | im Browser-Tab verschwindest du sofort (bestmöglich, wie 29) | |
 
-## Deep-Links, Einzelinstanz, Autostart, Dialoge (nach Task 5)
+## Deep-Links, Einzelinstanz, Autostart
 
 Per E2E mit nachgebautem Tauri geprüft: Startlink vor dem Auto-Beitritt, Link im Gespräch (Gegenüber sieht
 dich sofort gehen, dieselbe Identität, ein Tray-Symbol), ungültige Links samt `plaudr://quit`, Autostart-
-Schalter mit Fehlern, Speichern und Laden über die Dialoge. An der echten macOS-App beim Bau schon
-nachgesehen: 34, 35 (ohne Gespräch), 36, 37, 39 und das Ein- und Ausschalten in 40 (LaunchAgent
+Schalter mit Fehlern. Die Dialoge für die Sicherung stehen im nächsten Abschnitt. An der echten macOS-App
+beim Bau schon nachgesehen: 34, 35 (ohne Gespräch), 36, 37, 39 und das Ein- und Ausschalten in 40 (LaunchAgent
 `~/Library/LaunchAgents/plaudr.plist` mit `--hidden` erscheint und verschwindet). Offen ist der Rest.
 Ein gültiges Geheimnis: im Browser einen Raum erstellen und den Teil nach `#` nehmen.
 
@@ -93,13 +103,27 @@ Ein gültiges Geheimnis: im Browser einen Raum erstellen und den Teil nach `#` n
 | 38 | macOS | Einladungslink `https://plaudr.room.ws/#…` in Safari anklicken | öffnet die Web-App (das Schema https bleibt beim Browser); Einfügen des Links in „Deine Räume“ der App führt in den Raum | |
 | 39 | macOS | `open -a plaudr.app --args --hidden` | kein Fenster, Tray-Symbol da; war „Zuletzt genutzten Raum automatisch betreten“ an, ist die App im letzten Raum (Gegenüber sieht dich) | |
 | 40 | macOS | Einstellungen › Start › „Beim Anmelden starten (im Tray)“ an, abmelden, anmelden | plaudr startet ohne Fenster im Tray, Auto-Beitritt wie in 39; Haken nach dem Öffnen der Einstellungen gesetzt; aus: startet nicht mehr | |
-| 41 | macOS | Schlüssel sichern: Speichern-Dialog, Vorschlag `plaudr-<Name>.plaudr-key`; einmal abbrechen, einmal speichern | Abbrechen lässt die Sicherung ausstehend; gespeicherte Datei liegt am gewählten Ort | |
-| 42 | macOS | Sicherung laden: „Datei wählen“ (Dateifeld fehlt), Datei aus 41 wählen, Passwort, „Sicherung laden“ | Öffnen-Dialog zeigt nur `.plaudr-key`, der Dateiname steht neben dem Knopf, danach „Sicherung geladen.“ und die 4 Wörter der Sicherung | |
-| 43 | Windows | App läuft (auch im Tray); in Explorer oder Win+R `plaudr://raum#<Geheimnis>` | kein zweites Fenster, kein zweites Tray-Symbol; die laufende App kommt nach vorn und betritt den Raum (Link kommt über die zweite Instanz an) | |
-| 44 | Windows | App beendet, wie 43 | App startet und betritt den Raum | |
-| 45 | Windows | wie 36, 37 (zweiter Start von `plaudr.exe`), 39 bis 42 (Autostart über den Registry-Eintrag `HKCU\…\Run`) | wie dort | |
+| 41 | Windows | App läuft (auch im Tray); in Explorer oder Win+R `plaudr://raum#<Geheimnis>` | kein zweites Fenster, kein zweites Tray-Symbol; die laufende App kommt nach vorn und betritt den Raum (Link kommt über die zweite Instanz an) | |
+| 42 | Windows | App beendet, wie 41 | App startet und betritt den Raum | |
+| 43 | Windows | wie 36, 37 (zweiter Start von `plaudr.exe`), 39 und 40 (Autostart über den Registry-Eintrag `HKCU\…\Run`) | wie dort | |
 
-## Release-Build aus CI (nach Task 6)
+## Sicherung über Dialoge (wichtig)
+
+**Wichtig:** Die Pflichtsicherung des Schlüssels (ohne gesicherten Schlüssel kein Gespräch) hängt an
+diesen Dialogen: Geht Speichern oder Laden in der Desktop-App nicht, kommt dort niemand weiter. Der
+Dateizugriff (FS-Scope in der Capability) lässt sich nur am echten Bündel prüfen, nicht im E2E mit
+nachgebautem Tauri. Prüfe deshalb mit der gebauten App, nicht im Dev-Modus, und wähle Orte außerhalb des
+Download-Ordners.
+
+| # | Plattform | Prüfung | Erwartung | Ergebnis |
+|---|---|---|---|---|
+| 44 | macOS | Schlüssel sichern: Speichern-Dialog, Vorschlag `plaudr-<Name>.plaudr-key`; einmal abbrechen, einmal speichern (etwa auf dem Schreibtisch) | Abbrechen lässt die Sicherung ausstehend; gespeicherte Datei liegt am gewählten Ort, ohne Fehlermeldung | |
+| 45 | macOS | Sicherung laden: „Datei wählen“ (Dateifeld fehlt), Datei aus 44 wählen, Passwort, „Sicherung laden“ | Öffnen-Dialog zeigt nur `.plaudr-key`, der Dateiname steht neben dem Knopf, danach „Sicherung geladen.“ und die 4 Wörter der Sicherung | |
+| 46 | macOS | Speichern und Laden mit einem Ort auf einem externen Datenträger oder in einem Ordner unter „Dokumente“ | funktioniert wie 44 und 45 (kein Zugriffsfehler durch den FS-Scope) | |
+| 47 | Windows | wie 44 und 45 (Speichern-Dialog von Windows, Pfad mit Leerzeichen oder Umlaut) | wie dort | |
+| 48 | Windows | wie 46 (anderes Laufwerk oder Netzwerkordner) | wie 46 | |
+
+## Installation (Release-Build aus CI)
 
 Artefakte aus dem Workflow „Desktop“ (`docs/release.md`), nicht der lokale Bau. Unter macOS zeigt nur die
 signierte und notarisierte Fassung, ob die Hardened Runtime das Mikrofon freigibt; die ad-hoc-signierte
@@ -107,15 +131,15 @@ läuft ebenfalls mit Hardened Runtime und Entitlements und ist ein guter Vortest
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
 |---|---|---|---|---|
-| 46 | macOS | `plaudr_<Version>_universal.dmg` öffnen, App in „Programme“ ziehen, starten | signiert: startet ohne Gatekeeper-Warnung (`spctl -a -vv /Applications/plaudr.app` meldet „Notarized Developer ID“); ad-hoc: erst nach `xattr -dr com.apple.quarantine` | |
-| 47 | macOS | Raum betreten, Gespräch gegen den Browser-Tab | Mikrofonabfrage einmal, das Gegenüber hört dich (Entitlement `com.apple.security.device.audio-input` wirkt) | |
-| 48 | macOS | Intel-Mac oder `arch -x86_64 /Applications/plaudr.app/Contents/MacOS/plaudr` | App läuft auch als x86_64 (Universal-Bündel) | |
-| 49 | Windows | `plaudr_<Version>_x64-setup.exe` ausführen | SmartScreen warnt („Der Computer wurde durch Windows geschützt“), über „Weitere Informationen“ › „Trotzdem ausführen“ geht es weiter; Installation ohne Adminrechte, Eintrag im Startmenü | |
-| 50 | Windows | Installation auf einem Rechner ohne WebView2-Runtime (etwa Windows 10 ohne Edge-Update) | Installer lädt die Runtime nach (Bootstrapper), danach startet plaudr | |
-| 51 | Windows | Punkte 7 bis 9 und 43 mit der installierten App | wie dort; `plaudr://` ist nach dem ersten Start eingetragen | |
-| 52 | Windows | Deinstallation über „Apps“ in den Einstellungen | App und Startmenü-Eintrag sind weg | |
+| 49 | macOS | `plaudr_<Version>_universal.dmg` öffnen, App in „Programme“ ziehen, starten | signiert: startet ohne Gatekeeper-Warnung (`spctl -a -vv /Applications/plaudr.app` meldet „Notarized Developer ID“); ad-hoc: erst nach `xattr -dr com.apple.quarantine` | |
+| 50 | macOS | Raum betreten, Gespräch gegen den Browser-Tab | Mikrofonabfrage einmal, das Gegenüber hört dich (Entitlement `com.apple.security.device.audio-input` wirkt) | |
+| 51 | macOS | Intel-Mac oder `arch -x86_64 /Applications/plaudr.app/Contents/MacOS/plaudr` | App läuft auch als x86_64 (Universal-Bündel) | |
+| 52 | Windows | `plaudr_<Version>_x64-setup.exe` ausführen | SmartScreen warnt („Der Computer wurde durch Windows geschützt“), über „Weitere Informationen“ › „Trotzdem ausführen“ geht es weiter; Installation ohne Adminrechte, Eintrag im Startmenü | |
+| 53 | Windows | Installation auf einem Rechner ohne WebView2-Runtime (etwa Windows 10 ohne Edge-Update) | Installer lädt die Runtime nach (Bootstrapper), danach startet plaudr | |
+| 54 | Windows | Punkte 7 bis 9 und 41 mit der installierten App | wie dort; `plaudr://` ist nach dem ersten Start eingetragen | |
+| 55 | Windows | Deinstallation über „Apps“ in den Einstellungen | App und Startmenü-Eintrag sind weg | |
 
-## Updates (nach Task 7)
+## Update
 
 Braucht zwei veröffentlichte Releases aus dem Workflow (`docs/release.md`, Abschnitt Updates), mit den
 Secrets `TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Ablauf: `desktop-v0.1.0`
@@ -124,13 +148,13 @@ taggen, Entwurf veröffentlichen, 0.1.0 auf beiden Systemen installieren; dann V
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
 |---|---|---|---|---|
-| 53 | beide | Release-Entwurf 0.1.1 ansehen | enthält `latest.json` mit `version` 0.1.1 und den Plattformen `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`; je eine `.sig` zu `.app.tar.gz` und `-setup.exe` | |
-| 54 | beide | 0.1.1 noch Entwurf; plaudr 0.1.0 starten | kein Hinweis auf dem Startbildschirm (`releases/latest` ist noch 0.1.0) | |
-| 55 | beide | Entwurf 0.1.1 veröffentlichen (nicht als Pre-Release), plaudr 0.1.0 neu starten | Startbildschirm zeigt „Neue Version 0.1.1 verfügbar.“ und „Jetzt aktualisieren“ | |
-| 56 | beide | wie 55, aber plaudr startet per Auto-Beitritt direkt ins Gespräch | im Gespräch kein Hinweis, nichts wird geladen; nach „Verlassen“ erscheint der Hinweis | |
-| 57 | macOS | „Jetzt aktualisieren“ | Knopf gesperrt, nach kurzer Zeit startet plaudr neu; „About plaudr“ im App-Menü zeigt 0.1.1, Identität, Räume und PTT-Taste sind noch da, kein neuer Hinweis | |
-| 58 | Windows | „Jetzt aktualisieren“ | plaudr beendet sich, der Installer läuft ohne Rückfragen (passiv, Fortschrittsfenster) und startet plaudr neu; „Apps“ in den Windows-Einstellungen zeigt 0.1.1, Tray-Symbol nur einmal, Identität und Räume sind noch da | |
-| 59 | beide | ohne Netz starten | kein Hinweis, keine Fehlermeldung; in der Web-Konsole nur eine Warnung „Suche nach Updates fehlgeschlagen“ | |
-| 60 | macOS | ad-hoc-signierte Fassung: nach dem Update Raum betreten | ggf. erneute Mikrofonabfrage (neue ad-hoc-Signatur), danach Ton wie in 47 | |
+| 56 | beide | Release-Entwurf 0.1.1 ansehen | enthält `latest.json` mit `version` 0.1.1 und den Plattformen `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`; je eine `.sig` zu `.app.tar.gz` und `-setup.exe` | |
+| 57 | beide | 0.1.1 noch Entwurf; plaudr 0.1.0 starten | kein Hinweis auf dem Startbildschirm (`releases/latest` ist noch 0.1.0) | |
+| 58 | beide | Entwurf 0.1.1 veröffentlichen (nicht als Pre-Release), plaudr 0.1.0 neu starten | Startbildschirm zeigt „Neue Version 0.1.1 verfügbar.“ und „Jetzt aktualisieren“ | |
+| 59 | beide | wie 55, aber plaudr startet per Auto-Beitritt direkt ins Gespräch | im Gespräch kein Hinweis, nichts wird geladen; nach „Verlassen“ erscheint der Hinweis | |
+| 60 | macOS | „Jetzt aktualisieren“ | Knopf gesperrt, nach kurzer Zeit startet plaudr neu; „About plaudr“ im App-Menü zeigt 0.1.1, Identität, Räume und PTT-Taste sind noch da, kein neuer Hinweis | |
+| 61 | Windows | „Jetzt aktualisieren“ | plaudr beendet sich, der Installer läuft ohne Rückfragen (passiv, Fortschrittsfenster) und startet plaudr neu; „Apps“ in den Windows-Einstellungen zeigt 0.1.1, Tray-Symbol nur einmal, Identität und Räume sind noch da | |
+| 62 | beide | ohne Netz starten | kein Hinweis, keine Fehlermeldung; in der Web-Konsole nur eine Warnung „Suche nach Updates fehlgeschlagen“ | |
+| 63 | macOS | ad-hoc-signierte Fassung: nach dem Update Raum betreten | ggf. erneute Mikrofonabfrage (neue ad-hoc-Signatur), danach Ton wie in 47 | |
 
-Ergebnis und Auffälligkeiten hier oder in STATUS.md festhalten.
+Die Spalte „Ergebnis“ füllst du beim Prüfen aus; Auffälligkeiten fließen in die Spec (§8) zurück.

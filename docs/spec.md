@@ -275,8 +275,12 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
 
 - Bündelt den Build aus `web/` und lädt nie die Live-Seite: Der Code der App kann
   dann nicht serverseitig ausgetauscht werden.
-- Release-Profil auf Größe optimiert (`opt-level = "s"`, `lto`, `codegen-units = 1`,
-  `panic = "abort"`, `strip`): 3,2 MB statt 10 MB.
+- Release-Profil auf Größe optimiert (`opt-level = "z"`, `lto`, `codegen-units = 1`,
+  `panic = "abort"`, `strip`). Mit `"s"` lag nach dem Updater die x86_64-Hälfte über 5 MB. Das Limit
+  von 5 MB gilt je Architektur: Das Universal-Bündel (knapp 8 MB) enthält die Binärdatei doppelt, CI
+  prüft deshalb jede Hälfte einzeln. Gemessen im ersten CI-Lauf (vor dem Updater): DMG 3,98 MiB,
+  `.app` gezippt 3,96 MiB, NSIS-Installer 1,5 MiB. Die Größe der Windows-`.exe` mit Updater ist noch
+  nicht neu gemessen.
 - Zusätze gegenüber dem Browser:
   - globale PTT-Taste über `tauri-plugin-global-shortcut` (Pressed/Released-Ereignisse),
     frei belegbar
@@ -284,18 +288,29 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
   - Link-Übernahme: `plaudr://`-Deep-Link (`tauri-plugin-deep-link`) und Einfügen eines
     `https://plaudr.room.ws/#…`-Links
   - optional Autostart
+  - Cmd+Q unter macOS läuft über einen eigenen App-Menüeintrag „plaudr beenden“, damit der Raum
+    vorher verlassen wird; Abmelden und Beenden über das Dock warten bestmöglich 1 s darauf
+  - Tray-Symbol beim Senden in `#2e8b3e` statt `#0f5c1a`, damit es auf dunklen Leisten sichtbar bleibt
   - Sicherungsdatei über den nativen Speichern- und Öffnen-Dialog statt Browser-Download
 - Origin: macOS `tauri://localhost`, Windows `http://tauri.localhost`. Beide sind ohne
   Änderung an der VM erlaubt: room_ws trägt `localhost` fest in die Freigabeliste ein
   (`newHub`, per Admin-Befehl nicht entfernbar), und `isAllowed` akzeptiert neben dem
   Hostnamen selbst jede Unterdomäne (Endung `.localhost`). Das gilt auch für `/turn` (CORS).
-- macOS: `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`; signiert mit
-  Developer-ID-Zertifikat und notarisiert (Apple-Developer-Konto vorhanden).
-  DMG-Bundling scheitert auf macOS 27 (`hdiutil create` veraltet): in CI auf einem
-  älteren macOS-Runner bauen oder vorerst `.app` als ZIP ausliefern.
-- Updates über `tauri-plugin-updater` mit signierten Paketen.
-- Vor M4 ein Prototyp: Mikrofon unter Windows (WebView2), globale PTT-Taste mit
-  Loslassen auf beiden Plattformen, notarisierte macOS-Build.
+- macOS: `NSMicrophoneUsageDescription` in `src-tauri/Info.plist`, Hardened Runtime mit
+  `Entitlements.plist` (`com.apple.security.device.audio-input`). Signiert und notarisiert wird nur,
+  wenn CI alle sechs `APPLE_*`-Secrets hat, sonst ad-hoc (`docs/release.md`).
+  DMG-Bundling scheitert lokal auf macOS 27 (`hdiutil create` veraltet): Das DMG baut CI auf
+  `macos-15`, lokal entsteht nur das `.app`.
+- Windows: NSIS-Installer ohne Signatur (SmartScreen-Warnung, offen in Abschnitt 13).
+- Updates über `tauri-plugin-updater`, Endpunkt
+  `releases/latest/download/latest.json`. Die Update-Artefakte erzeugt nur CI
+  (`src-tauri/tauri.release.conf.json`), lokale Builds brauchen keinen Schlüssel. Es wird nie
+  während eines Gesprächs installiert; während der Installation ist das Fenster gesperrt.
+- Globale PTT: Ob unter Windows das Loslassen (Released) ankommt, ist noch Handprobe
+  (`docs/m4-handprobe.md`). Ein Rückfall ist nicht eingebaut; schlägt die Probe fehl, ist er zu
+  entscheiden.
+- Stand: Prototyp, Plattformschicht, Tray, Deep-Links, CI-Release und Updater sind gebaut. Offen
+  sind die Handproben auf echten Systemen.
 
 ## 9. Web-Auslieferung
 
@@ -329,7 +344,7 @@ Direkt nach dem MVP. Nur zwischen gerade verbundenen Teilnehmern, über WebRTC.
 | M2 | Raumlink, HKDF, Umschläge, Ed25519, SDP-Bindung | manipulierter Fingerprint wird abgewiesen (Test) |
 | M3 | Audiokette, RNNoise, PTT, VAD, Opus-Tuning, Debug-Panel | Latenz und VAD im Zweiergespräch geprüft |
 | M3b | Bedienung nach Mock (Abschnitt 7) | alle Bildschirme im Browser bedienbar, E2E grün |
-| M4 | Tauri Windows + macOS, globale PTT-Taste, Tray | Installer für beide Plattformen |
+| M4 | Tauri Windows + macOS, globale PTT-Taste, Tray | Installer für beide Plattformen (CI baut beide; Handproben offen) |
 | M5 | GitHub Pages, CSP, PWA | `plaudr.room.ws` live |
 | P2 | Dateitransfer | Datei > 1 GB zwischen Browser und Desktop übertragen |
 
