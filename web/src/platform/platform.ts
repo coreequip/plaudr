@@ -1,4 +1,5 @@
 import type { SpeakMode } from '../audio/gate';
+import { webPlatform } from './web';
 
 export interface AppState {
   inCall: boolean;
@@ -37,8 +38,17 @@ export function detectOs(userAgent: string = navigator.userAgent): Platform['os'
   return 'other';
 }
 
-/** Der Desktop-Zweig ist ein eigener Chunk: Das Web-Bündel enthält keinen Tauri-Code. */
+/**
+ * Der Desktop-Zweig ist ein eigener Chunk: Das Web-Bündel enthält keinen Tauri-Code. Schlägt das Laden fehl
+ * (veralteter Chunk nach einem Deploy, Netz), bleibt es bei der Browser-Plattform; loadPlatform lehnt nie ab.
+ */
 export async function loadPlatform(actions: AppActions, w: Window = window): Promise<Platform> {
-  if (isDesktop(w)) return (await import('./desktop')).desktopPlatform(actions);
-  return (await import('./web')).webPlatform();
+  if (isDesktop(w)) {
+    try {
+      return (await import('./desktop')).desktopPlatform(actions);
+    } catch (err) {
+      console.warn('[plaudr] Desktop-Anbindung nicht ladbar, Browser-Verhalten', err);
+    }
+  }
+  return webPlatform();
 }

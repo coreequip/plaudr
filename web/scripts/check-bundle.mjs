@@ -11,9 +11,22 @@ if (entries.length === 0) {
   console.error('check-bundle: kein Einstiegs-Skript in dist/index.html gefunden');
   process.exit(1);
 }
+// Einstieg plus alles, was statisch daran hängt; dynamisch geladene Chunks (desktop) sind ausgenommen.
+const STATIC_IMPORT = /(?:^|[;}\s])(?:import|export)\s*(?:[^"'()]*?\bfrom\s*)?["']([^"']+\.js)["']/g;
+const seen = new Set();
+const queue = [...entries];
+while (queue.length) {
+  const rel = queue.shift();
+  if (seen.has(rel)) continue;
+  seen.add(rel);
+  const code = readFileSync(join(dist, rel), 'utf8');
+  for (const m of code.matchAll(STATIC_IMPORT)) {
+    if (m[1].startsWith('.')) queue.push(join(rel, '..', m[1]));
+  }
+}
 const FORBIDDEN = [/\binvoke\s*\(/, /plugin:/, /@tauri-apps/];
 let bad = 0;
-for (const rel of entries) {
+for (const rel of seen) {
   const code = readFileSync(join(dist, rel), 'utf8');
   for (const re of FORBIDDEN) {
     if (re.test(code)) {
@@ -23,4 +36,4 @@ for (const rel of entries) {
   }
 }
 if (bad) process.exit(1);
-console.log(`check-bundle: ok (${entries.join(', ')}; Chunks: ${readdirSync(join(dist, 'assets')).length})`);
+console.log(`check-bundle: ok (geprüft: ${[...seen].join(', ')}; Chunks gesamt: ${readdirSync(join(dist, 'assets')).length})`);

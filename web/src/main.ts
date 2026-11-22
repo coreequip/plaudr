@@ -81,8 +81,10 @@ void platformReady.then((p) => {
   if (lastState) p.update(lastState);
 });
 let lastState: AppState | null = null;
+const sameState = (a: AppState, b: AppState) => (Object.keys(a) as (keyof AppState)[]).every((k) => a[k] === b[k]);
 /** Meldet den Zustand an die Plattform; erst nach dem Laden der Plattform, dann mit dem letzten Stand. */
 function pushState(s: AppState): void {
+  if (lastState && sameState(lastState, s)) return;
   lastState = s;
   try {
     platform?.update(s);
@@ -339,6 +341,8 @@ async function join(secret: string): Promise<void> {
       capture?.close();
       sending = false;
       report(false);
+      callActions = null;
+      callLeave = null;
       await mesh.leave();
     })());
   callLeave = leaveCall;
