@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { openEnvelope, seal } from '../crypto/envelope';
 import { loadOrCreateIdentity, verifySignature, type Identity } from '../crypto/identity';
 import { deriveRoom } from '../crypto/room-keys';
@@ -269,6 +269,33 @@ describe('empfangen', () => {
     now = NOW + 241_000;
     await incoming(B, { nonce: 'n1', ts: now });
     expect(got).toHaveLength(2);
+  });
+});
+
+describe('Aufräumen', () => {
+  test('fällt die Verbindung während des Signierens, geht die Nachricht nach dem Reconnect mit neuer cid raus', async () => {
+    let first = true;
+    makeSignaling({ ...A, sign: async (d) => (first && ((first = false), drone.emit('close')), A.sign(d)) });
+    drone.room.emit('members', ['c-self']);
+    sig.send('answer', B.peerId, { sdp: 'x' });
+    await sleep(20);
+    expect(drone.published).toHaveLength(0);
+    drone.clientId = 'c-new';
+    drone.room.emit('members', ['c-new']);
+    await sig.idle();
+    expect(drone.published).toHaveLength(1);
+    expect((await published(0)).payload.cid).toBe('c-new');
+  });
+
+  test('nach close ist kein Timer mehr offen', async () => {
+    vi.useFakeTimers();
+    try {
+      drone.room.emit('members', ['c-self']);
+      await sig.close();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

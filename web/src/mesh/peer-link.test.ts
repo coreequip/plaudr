@@ -17,7 +17,12 @@ class FakePC {
   slds: RTCSessionDescriptionInit[] = [];
   /** Wird in createOffer ausgeführt, bevor das Angebot zurückkommt (zum Simulieren von Glare). */
   duringCreateOffer: () => void = () => {};
+  added: string[] = [];
   constructor() { FakePC.last = this; }
+  async addIceCandidate(c: RTCIceCandidateInit) {
+    if (c.candidate === 'kaputt') throw new Error('kaputter Kandidat');
+    this.added.push(c.candidate!);
+  }
   async createOffer() {
     this.duringCreateOffer();
     return { type: 'offer' as const, sdp: OPUS_SDP };
@@ -129,4 +134,10 @@ test('ontrack setzt den Jitterpuffer-Zielwert auf 0', () => {
   const receiver = { jitterBufferTarget: 200 as number | null };
   (pc.ontrack as (e: unknown) => void)({ receiver, streams: [{}], track: {} });
   expect(receiver.jitterBufferTarget).toBe(0);
+});
+
+test('ein kaputter Kandidat im Bündel verwirft die anderen nicht', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  await link.handle({ kind: 'ice', from: 'B', to: 'A', cid: 'c', ts: 0, nonce: 'n', body: { c: [{ candidate: 'eins' }, { candidate: 'kaputt' }, { candidate: 'drei' }] } });
+  expect(pc.added).toEqual(['eins', 'drei']);
 });

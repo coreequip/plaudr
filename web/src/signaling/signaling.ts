@@ -106,19 +106,29 @@ export class Signaling {
 
   /** Veröffentlicht noch Eingereihtes (etwa das bye), höchstens CLOSE_FLUSH_MS lang, und trennt dann. */
   async close(): Promise<void> {
-    await Promise.race([this.sendQueue, new Promise((r) => setTimeout(r, CLOSE_FLUSH_MS))]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([this.sendQueue, new Promise((r) => (timer = setTimeout(r, CLOSE_FLUSH_MS)))]);
+    clearTimeout(timer);
     this.o.drone.close();
   }
 
   private async publishOne<K extends Kind>(kind: K, to: string, body: Bodies[K]): Promise<void> {
-    if (!this.connected) await new Promise<void>((r) => this.waiters.push(r));
-    const payload: Payload<K> = {
-      kind, from: this.o.identity.peerId, to, cid: this.o.drone.clientId ?? '', ts: this.o.now(), nonce: randomBase64url(16), body,
-    };
-    const p = JSON.stringify(payload);
-    const sig = await this.o.identity.sign(p);
-    const message = await seal(this.o.roomKey, JSON.stringify({ p, sig }));
-    this.o.drone.publish({ room: this.o.roomId, message, no_echo: true });
+    // Fällt die Verbindung während Signieren oder Verschlüsseln, trüge die Nachricht die alte cid und würde beim
+    // Empfänger verworfen: dann nach dem nächsten members mit neuer cid neu bauen.
+    for (;;) {
+      if (!this.connected) await new Promise<void>((r) => this.waiters.push(r));
+      const cid = this.o.drone.clientId ?? '';
+      const payload: Payload<K> = {
+        kind, from: this.o.identity.peerId, to, cid, ts: this.o.now(), nonce: randomBase64url(16), body,
+      };
+      const p = JSON.stringify(payload);
+      const sig = await this.o.identity.sign(p);
+      const message = await seal(this.o.roomKey, JSON.stringify({ p, sig }));
+      if (this.connected && this.o.drone.clientId === cid) {
+        this.o.drone.publish({ room: this.o.roomId, message, no_echo: true });
+        return;
+      }
+    }
   }
 
   private async receive(msg: unknown, senderCid: string | undefined): Promise<void> {

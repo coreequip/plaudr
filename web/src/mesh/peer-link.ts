@@ -166,7 +166,8 @@ export class PeerLink implements PeerLinkLike {
         try {
           await pc.addIceCandidate(c);
         } catch (err) {
-          if (!this.ignoreOffer) throw err;
+          // Ein kaputter Kandidat darf den Rest des Bündels nicht verwerfen.
+          if (!this.ignoreOffer) console.warn('[plaudr] ICE-Kandidat abgelehnt', err);
         }
       }
     }

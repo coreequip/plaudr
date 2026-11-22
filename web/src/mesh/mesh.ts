@@ -36,6 +36,7 @@ export class Mesh {
   private readonly links = new Map<string, PeerLinkLike>();
   private readonly pendingNames = new Map<string, string>();
   private readonly sids = new Map<string, string>();
+  private left = false;
   private readonly sid: string;
   private readonly leaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly createLink: (o: PeerLinkOptions) => PeerLinkLike;
@@ -99,6 +100,9 @@ export class Mesh {
   }
 
   async leave(): Promise<void> {
+    // Verlassen-Knopf und danach pagehide beim Neuladen: nur einmal verabschieden.
+    if (this.left) return;
+    this.left = true;
     this.o.signaling.send('bye', '*', {});
     for (const id of [...this.links.keys()]) this.remove(id);
     await this.o.signaling.close();

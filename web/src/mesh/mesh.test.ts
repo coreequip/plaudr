@@ -246,3 +246,10 @@ describe('neue Sitzung desselben Teilnehmers (Neuladen ohne bye)', () => {
     expect(linksFor('C')).toHaveLength(2);
   });
 });
+
+test('zweites leave sendet kein zweites bye', async () => {
+  hello('B');
+  await mesh.leave();
+  await mesh.leave();
+  expect(sig.sent.filter((m) => m.kind === 'bye')).toHaveLength(1);
+});
