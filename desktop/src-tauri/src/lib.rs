@@ -10,7 +10,8 @@ pub fn run() {
             if !hidden {
                 if let Some(window) = app.get_webview_window("main") {
                     window.show()?;
-                    window.set_focus()?;
+                    // Fokus ist nur eine Bitte an das System; scheitert er, läuft die App trotzdem.
+                    let _ = window.set_focus();
                 }
             }
             Ok(())
