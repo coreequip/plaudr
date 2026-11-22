@@ -2,7 +2,7 @@ import './style.css';
 import RoomWS from 'roomws';
 import { ROOMWS_CHANNEL, ROOMWS_URL, TURN_URL } from './config';
 import { fetchIceServers } from './ice-servers';
-import { openCapture } from './audio/pipeline';
+import { openCapture, type Capture } from './audio/pipeline';
 import type { CaptureActivity } from './audio/messages';
 import { loadAudioSettings, saveAudioSettings, type AudioSettings } from './audio/settings';
 import { Mesh, type PeerView } from './mesh/mesh';
@@ -20,8 +20,9 @@ import { initBackupPanel, showBackupState } from './ui/backup-panel';
 import { initCallHeader } from './ui/call-view';
 import { initControls } from './ui/controls';
 import { initDebug } from './ui/debug';
-import { loadPrefs } from './ui/prefs';
+import { loadPrefs, savePrefs } from './ui/prefs';
 import { initRoomsView } from './ui/rooms-view';
+import { initSettings, type SettingsView } from './ui/settings-view';
 import { applyTheme } from './ui/theme';
 import * as view from './ui/view';
 
@@ -51,6 +52,32 @@ let identity: Identity | null = null;
 let tabLocked = false;
 /** Ein Beitritt hat in dieser Seite begonnen (höchstens einer je Seitenaufruf, auch während er noch lädt). */
 let inCall = false;
+let settingsView: SettingsView | null = null;
+/** Aufnahme des laufenden Gesprächs für die Einstellungen; null außerhalb eines Gesprächs. */
+let callAudio: {
+  settings(): AudioSettings;
+  set(p: Partial<AudioSettings>): Promise<void>;
+  activity(): CaptureActivity | null;
+  render(): void;
+} | null = null;
+
+// Test-Aufnahme für den Pegel in den Einstellungen außerhalb eines Gesprächs. Der Zähler verwirft eine
+// Aufnahme, die erst nach dem Schließen fertig wird, damit das Mikrofon nicht an bleibt.
+let testCapture: Capture | null = null;
+let testToken = 0;
+async function openTestCapture(): Promise<void> {
+  const token = ++testToken;
+  const c = await openCapture({ ...loadAudioSettings(), mode: 'vad' });
+  if (token !== testToken) return c?.close();
+  testCapture = c;
+  // Gerätenamen gibt es erst nach der Freigabe.
+  await settingsView?.refreshMics();
+}
+function closeTestCapture(): void {
+  testToken++;
+  testCapture?.close();
+  testCapture = null;
+}
 
 function loadName(): string {
   try {
@@ -119,8 +146,9 @@ function prepareLobby(): Promise<void> {
       setIdentity: (id) => {
         identity = id;
         updateJoinButton();
+        settingsView?.refreshIdentity();
       },
-      name: nameValue,
+      name: () => nameValue() || loadName(),
     });
     showBackupState(identity);
     updateJoinButton();
@@ -135,6 +163,7 @@ async function join(secret: string): Promise<void> {
   // Vor dem ersten await: ein zweiter Aufruf (Doppelklick, anderer Raum per Fragment) startet kein zweites Mesh.
   if (inCall || !name || !me) return;
   inCall = true;
+  closeTestCapture();
   saveName(name);
   $<HTMLButtonElement>('join').disabled = true;
 
@@ -198,7 +227,8 @@ async function join(secret: string): Promise<void> {
     void capture?.resume();
   };
 
-  initControls({ capture, settings: () => settings, setSettings });
+  const controls = initControls({ capture, settings: () => settings, setSettings });
+  callAudio = { settings: () => settings, set: setSettings, activity: () => capture?.activity() ?? null, render: controls.render };
   const speakingTimer = setInterval(() => view.markSpeaking(mesh.audioLevels()), 100);
   const stopDebug = initDebug({
     peers: () => mesh.peers(),
@@ -260,18 +290,68 @@ function boot(): void {
     create: () => {
       location.hash = createRoomSecret();
     },
-    settings: () => view.show('settings'),
+    settings: () => openSettings('start'),
   });
   $('lobby-back').onclick = () => {
     location.hash = '';
   };
-  // Einstellungen aus dem Gespräch: das Gespräch läuft weiter, Zurück führt wieder hinein.
-  $('call-settings').onclick = () => view.show('settings');
-  $('settings-back').onclick = () => (inCall ? view.show('call') : route());
+
+  // Einstellungen aus den Räumen oder dem Gespräch (das läuft weiter); Zurück führt dorthin, woher man kam.
+  let returnTo: 'start' | 'call' = 'start';
+  const settings = initSettings({
+    audio: () => callAudio?.settings() ?? loadAudioSettings(),
+    setAudio: async (p) => {
+      if (callAudio) return callAudio.set(p);
+      saveAudioSettings({ ...loadAudioSettings(), ...p });
+      await testCapture?.update(p);
+    },
+    activity: () => (callAudio ? callAudio.activity() : (testCapture?.activity() ?? null)),
+    prefs: loadPrefs,
+    setPrefs: (p) => {
+      const next = { ...loadPrefs(), ...p };
+      savePrefs(next);
+      applyTheme(next);
+    },
+    name: loadName,
+    setName: (n) => {
+      saveName(n);
+      if (!inCall) $<HTMLInputElement>('name').value = n;
+    },
+    identity: () => identity,
+    inCall: () => inCall,
+    back: () => {
+      closeSettings();
+      if (returnTo === 'call') {
+        callAudio?.render();
+        view.show('call');
+      } else {
+        rooms.render();
+        view.show('start');
+      }
+    },
+  });
+  settingsView = settings;
+  const closeSettings = () => {
+    settings.hide();
+    closeTestCapture();
+  };
+  const openSettings = (from: 'start' | 'call') => {
+    returnTo = from;
+    settings.show();
+    view.show('settings');
+    if (inCall) return;
+    // Außerhalb eines Gesprächs: Mikrofon für den Pegel, Identität für Wörter und Sicherung.
+    void openTestCapture();
+    void prepareLobby().then(() => settings.refreshIdentity());
+  };
+  $('call-settings').onclick = () => openSettings('call');
   $('unmute-audio').onclick = view.resumeAllAudio;
+  addEventListener('pagehide', closeTestCapture);
 
   let first = true;
   const route = () => {
+    // Fragment ändert sich bei offenen Einstellungen: Mikrofon freigeben, Sicherungskarte zurück in die Lobby.
+    if (!$('settings').hidden) closeSettings();
     // Anderer Raum im Fragment während eines Gesprächs oder Beitritts: neu laden, pagehide verlässt das alte sauber.
     if (inCall) return location.reload();
     const booted = first ? takeBooted() : true;

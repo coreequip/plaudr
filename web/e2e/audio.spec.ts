@@ -80,7 +80,7 @@ test.describe('Bedienung', () => {
     await expect(a.locator('#mode-ptt')).toHaveAttribute('aria-pressed', 'true');
     await expect(a.locator('#mode-vad')).toHaveAttribute('aria-pressed', 'false');
     await expect(a.locator('#ptt')).toBeVisible();
-    await expect(a.locator('#vad-threshold')).toBeHidden();
+    await expect(a.locator('#vad-meter')).toBeHidden();
     await b.waitForTimeout(700);
     expect(await maxLevel(b, aId, 2000)).toBeLessThan(0.005);
 
@@ -109,7 +109,7 @@ test.describe('Bedienung', () => {
 
   test('Lautstärke je Teilnehmer und eigene Sprechanzeige', async ({ browser }) => {
     const { a, b, aId } = await pair(browser, 'bedienunglaut');
-    await expect(b.locator('#vad-threshold')).toBeVisible();
+    await expect(b.locator('#vad-meter')).toBeVisible();
     await b.locator(`#peers li[data-peer="${aId}"] input[data-volume]`).fill('0.3');
     await expect.poll(() => b.evaluate((id) => document.querySelector<HTMLAudioElement>(`audio[data-peer="${id}"]`)!.volume, aId)).toBeCloseTo(0.3);
     await expect(a.locator('#me-speaking')).toBeVisible({ timeout: 10_000 });

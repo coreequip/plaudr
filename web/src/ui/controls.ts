@@ -23,8 +23,14 @@ export interface ControlsOptions {
 
 const pct = (v: number) => `${Math.round(v * 100)} %`;
 
-/** Sprechmodus, Pegel mit Schwelle, PTT (Knopf und Leertaste), Rauschunterdrückung, eigene Sprechanzeige. */
-export function initControls(o: ControlsOptions): () => void {
+export interface Controls {
+  /** Neu zeichnen, etwa nach Änderungen in den Einstellungen (Schwelle, Rauschunterdrückung). */
+  render(): void;
+  unbind(): void;
+}
+
+/** Sprechmodus, Pegel mit Schwelle (nur Anzeige, der Regler steht in den Einstellungen), PTT, Rauschunterdrückung. */
+export function initControls(o: ControlsOptions): Controls {
   const { capture } = o;
   const showThreshold = (t: number) => {
     $('vad-threshold-label').textContent = `Schwelle ${pct(t)}`;
@@ -36,7 +42,6 @@ export function initControls(o: ControlsOptions): () => void {
     // Ohne Mikrofon gibt es weder Pegel noch etwas zum Halten.
     $('ptt').hidden = !capture || s.mode !== 'ptt';
     $('vad-meter').hidden = !capture || s.mode !== 'vad';
-    $<HTMLInputElement>('vad-threshold').value = String(s.threshold);
     showThreshold(s.threshold);
     $<HTMLInputElement>('denoise').checked = s.denoise;
   };
@@ -49,12 +54,6 @@ export function initControls(o: ControlsOptions): () => void {
       render();
     };
   }
-  $<HTMLInputElement>('vad-threshold').disabled = !capture;
-  $<HTMLInputElement>('vad-threshold').oninput = (e) => {
-    const t = Number((e.target as HTMLInputElement).value);
-    showThreshold(t);
-    void o.setSettings({ threshold: t });
-  };
   $<HTMLInputElement>('denoise').disabled = !capture;
   $<HTMLInputElement>('denoise').onchange = (e) => void o.setSettings({ denoise: (e.target as HTMLInputElement).checked });
 
@@ -82,5 +81,5 @@ export function initControls(o: ControlsOptions): () => void {
   });
 
   render();
-  return unbindKeys;
+  return { render, unbind: unbindKeys };
 }
