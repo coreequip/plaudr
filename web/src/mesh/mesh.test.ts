@@ -15,7 +15,7 @@ class FakeSignaling implements SignalingLike {
   onReady(cb: (cid: string) => void) { this.ready.push(cb); }
   onMessage(cb: (p: Payload) => void) { this.msg.push(cb); }
   onLeave(cb: (cid: string) => void) { this.leave.push(cb); }
-  close() { this.closed = true; }
+  async close() { this.closed = true; }
   emitMsg(p: Partial<Payload> & Pick<Payload, 'kind' | 'from'>) {
     const full = { to: '*', cid: 'c-' + p.from, ts: 0, nonce: '', body: {}, ...p } as Payload;
     for (const cb of this.msg) cb(full);
@@ -41,7 +41,7 @@ let gone: string[];
 let mesh: Mesh;
 
 const hello = (from: string, cid = 'c-' + from, name = from) =>
-  sig.emitMsg({ kind: 'hello', from, cid, body: { name } });
+  sig.emitMsg({ kind: 'hello', from, cid, body: { pub: 'PUB-' + from, name, caps: [] } });
 const linksFor = (id: string) => links.filter((l) => l.peerId === id);
 const live = (id: string) => linksFor(id).filter((l) => !l.closed);
 
@@ -50,7 +50,7 @@ beforeEach(() => {
   links = [];
   gone = [];
   mesh = new Mesh({
-    signaling: sig, selfId: 'M', name: 'Mira', localStream: null, iceServers: [],
+    signaling: sig, selfId: 'M', selfPub: 'PUB-M', name: 'Mira', localStream: null, iceServers: [],
     createLink: (o) => { const l = new FakeLink(o); links.push(l); return l; },
     onTrack: () => {}, onPeerGone: (id) => gone.push(id), onChange: () => {},
   });
@@ -59,7 +59,7 @@ beforeEach(() => {
 
 test('ready schickt hello an alle', () => {
   sig.ready.forEach((cb) => cb('c-self'));
-  expect(sig.sent).toEqual([{ kind: 'hello', to: '*', body: { name: 'Mira' } }]);
+  expect(sig.sent).toEqual([{ kind: 'hello', to: '*', body: { pub: 'PUB-M', name: 'Mira', caps: [] } }]);
 });
 
 describe('hello', () => {
@@ -80,10 +80,10 @@ describe('hello', () => {
   test('beantwortet hello eines Unbekannten direkt mit eigenem Namen, ein bekanntes nicht', () => {
     hello('B');
     hello('B', 'c-new');
-    expect(sig.sent).toEqual([{ kind: 'hello', to: 'B', body: { name: 'Mira' } }]);
+    expect(sig.sent).toEqual([{ kind: 'hello', to: 'B', body: { pub: 'PUB-M', name: 'Mira', caps: [] } }]);
   });
   test('an mich gerichtetes hello eines Unbekannten legt keinen Link an, liefert aber den Namen fürs offer', () => {
-    sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { name: 'Cem' } });
+    sig.emitMsg({ kind: 'hello', from: 'C', to: 'M', body: { pub: 'PUB-C', name: 'Cem', caps: [] } });
     expect(links).toHaveLength(0);
     expect(sig.sent).toEqual([]);
     sig.emitMsg({ kind: 'offer', from: 'C', body: { sdp: 'x' } });
@@ -200,9 +200,9 @@ describe('Fehlschlag', () => {
   });
 });
 
-test('leave verabschiedet sich und räumt auf', () => {
+test('leave verabschiedet sich und räumt auf', async () => {
   hello('B');
-  mesh.leave();
+  await mesh.leave();
   expect(sig.sent).toContainEqual({ kind: 'bye', to: '*', body: {} });
   expect(linksFor('B')[0].closed).toBe(true);
   expect(sig.closed).toBe(true);

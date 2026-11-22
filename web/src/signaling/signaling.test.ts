@@ -287,8 +287,23 @@ describe('Präsenz', () => {
     drone.room.emit('member_leave', 'c9');
     expect(left).toEqual(['c9']);
   });
-  test('close schließt die Verbindung', () => {
-    sig.close();
+  test('close schließt die Verbindung', async () => {
+    await sig.close();
     expect(drone.closed).toBe(true);
+  });
+  test('close veröffentlicht vorher noch, was eingereiht ist (bye)', async () => {
+    drone.room.emit('members', ['c-self']);
+    sig.send('bye', '*', {});
+    await sig.close();
+    expect(drone.published).toHaveLength(1);
+    expect((await published(0)).payload.kind).toBe('bye');
+    expect(drone.closed).toBe(true);
+  });
+  test('close hängt nicht, wenn das Signaling gerade getrennt ist', async () => {
+    sig.send('bye', '*', {});
+    const t0 = Date.now();
+    await sig.close();
+    expect(drone.closed).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(1500);
   });
 });

@@ -3,14 +3,23 @@ import RoomWS from 'roomws';
 import { ROOMWS_CHANNEL, ROOMWS_URL, TURN_URL } from './config';
 import { fetchIceServers } from './ice-servers';
 import { Mesh, type PeerView } from './mesh/mesh';
+import { loadOrCreateIdentity } from './crypto/identity';
+import { idbIdentityStore } from './crypto/identity-store';
 import { deriveRoom } from './crypto/room-keys';
 import { buildLink, createRoomSecret, secretFromHash } from './room/link';
-import { Signaling } from './signaling/signaling';
+import { acquireTabLock } from './room/tab-lock';
+import { Signaling, type SignalingStats } from './signaling/signaling';
 import * as view from './ui/view';
 
 declare global {
   interface Window {
-    plaudr?: { peers(): PeerView[]; bytesReceived(): Promise<Record<string, number>>; dropSignaling(): void };
+    plaudr?: {
+      selfId: string;
+      peers(): PeerView[];
+      bytesReceived(): Promise<Record<string, number>>;
+      signalingStats(): SignalingStats;
+      dropSignaling(): void;
+    };
   }
 }
 
@@ -45,15 +54,30 @@ async function openMicrophone(): Promise<MediaStream | null> {
 async function join(secret: string): Promise<void> {
   const name = $<HTMLInputElement>('name').value.trim() || 'Gast';
   saveName(name);
-  $<HTMLButtonElement>('join').disabled = true;
+  const joinButton = $<HTMLButtonElement>('join');
+  joinButton.disabled = true;
 
-  const [localStream, iceServers] = await Promise.all([openMicrophone(), fetchIceServers(TURN_URL)]);
+  // Zwei Tabs teilen sich die Identität und damit die peerId; das Mesh kann das nicht auseinanderhalten.
+  if (!(await acquireTabLock())) {
+    const n = $('lobby-notice');
+    n.textContent = 'plaudr ist in diesem Browser schon in einem anderen Tab offen.';
+    n.hidden = false;
+    joinButton.disabled = false;
+    return;
+  }
+
+  const [localStream, iceServers, { roomId, roomKey }, identity] = await Promise.all([
+    openMicrophone(),
+    fetchIceServers(TURN_URL),
+    deriveRoom(secret),
+    loadOrCreateIdentity(idbIdentityStore()),
+  ]);
+  if (!identity.persistent) view.notice('Deine Identität wird in diesem Browser nicht gespeichert.');
   const drone = new RoomWS(ROOMWS_CHANNEL, { url: ROOMWS_URL });
-  const selfId = crypto.randomUUID();
-  const { roomId } = await deriveRoom(secret);
-  const signaling = new Signaling({ drone, roomId, selfId });
+  const selfId = identity.peerId;
+  const signaling = new Signaling({ drone, roomId, roomKey, identity });
   const mesh = new Mesh({
-    signaling, selfId, name, localStream, iceServers,
+    signaling, selfId, selfPub: identity.pub, name, localStream, iceServers,
     onTrack: view.attachAudio,
     onPeerGone: view.detachAudio,
     onChange: view.renderPeers,
@@ -72,15 +96,18 @@ async function join(secret: string): Promise<void> {
     track.enabled = !track.enabled;
     mute.textContent = track.enabled ? 'Stumm' : 'Mikro an';
   };
-  $('leave').onclick = () => {
-    mesh.leave();
+  $('leave').onclick = async () => {
     localStream?.getTracks().forEach((t) => t.stop());
+    await mesh.leave();
     location.reload();
   };
-  addEventListener('pagehide', () => mesh.leave(), { once: true });
+  // Beim Schließen des Tabs reicht die Zeit meist nicht mehr fürs Signieren: Dann greift die Gnadenfrist nach member_leave.
+  addEventListener('pagehide', () => void mesh.leave(), { once: true });
 
   window.plaudr = {
+    selfId,
     peers: () => mesh.peers(),
+    signalingStats: () => signaling.stats(),
     bytesReceived: () => mesh.bytesReceived(),
     dropSignaling: () => drone.socket.close(),
   };

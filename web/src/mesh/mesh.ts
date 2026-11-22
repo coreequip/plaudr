@@ -1,5 +1,5 @@
 import type { Signaling } from '../signaling/signaling';
-import type { Payload } from '../signaling/types';
+import type { Bodies, Payload } from '../signaling/types';
 import { PeerLink, type PeerLinkLike, type PeerLinkOptions } from './peer-link';
 
 const LEAVE_GRACE_MS = 5000;
@@ -15,6 +15,7 @@ export interface PeerView {
 export interface MeshOptions {
   signaling: SignalingLike;
   selfId: string;
+  selfPub: string;
   name: string;
   localStream: MediaStream | null;
   iceServers: RTCIceServer[];
@@ -37,7 +38,7 @@ export class Mesh {
 
   start(): void {
     const s = this.o.signaling;
-    s.onReady(() => s.send('hello', '*', { name: this.o.name }));
+    s.onReady(() => s.send('hello', '*', this.helloBody()));
     s.onMessage((p) => this.onMessage(p));
     // room_ws meldet member_leave auch, wenn ein Teilnehmer nur kurz neu verbindet; der P2P-Pfad läuft dann
     // weiter. Deshalb erst nach einer Gnadenfrist abbauen, ein hello mit neuer cid hebt sie auf.
@@ -66,10 +67,10 @@ export class Mesh {
     return out;
   }
 
-  leave(): void {
+  async leave(): Promise<void> {
     this.o.signaling.send('bye', '*', {});
     for (const id of [...this.links.keys()]) this.remove(id);
-    this.o.signaling.close();
+    await this.o.signaling.close();
   }
 
   private onMessage(p: Payload): void {
@@ -77,14 +78,14 @@ export class Mesh {
     let link = this.links.get(p.from);
     switch (p.kind) {
       case 'hello': {
-        const name = (p.body as { name: string }).name;
+        const name = (p.body as Bodies['hello']).name;
         if (link) {
           this.setCid(p.from, link, p.cid);
           link.name = name;
           this.changed();
         } else if (p.to === '*') {
           // Neuer Teilnehmer: ihm den eigenen Namen nennen, das Angebot kommt über negotiationneeded.
-          this.o.signaling.send('hello', p.from, { name: this.o.name });
+          this.o.signaling.send('hello', p.from, this.helloBody());
           this.add(p.from, p.cid, name);
         } else {
           // Antwort auf mein eigenes hello: Das Gegenüber bietet an, ich merke mir nur den Namen.
@@ -105,6 +106,10 @@ export class Mesh {
         if (link) this.remove(p.from);
         return;
     }
+  }
+
+  private helloBody(): Bodies['hello'] {
+    return { pub: this.o.selfPub, name: this.o.name, caps: [] };
   }
 
   private add(peerId: string, cid: string, name: string): PeerLinkLike {

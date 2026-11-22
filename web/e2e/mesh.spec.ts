@@ -1,54 +1,7 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { bytes, closeContexts, connected, expectAudioFlowing, expectMesh, join, open, peerCount, roomHash } from './helpers';
 
-/** Eigener Raum je Test: 43 Zeichen base64url. */
-function roomHash(label: string): string {
-  return '#' + (label.replace(/[^A-Za-z0-9]/g, '') + 'A'.repeat(43)).slice(0, 43);
-}
-
-async function open(browser: Browser, hash: string, opts: { noMic?: boolean } = {}): Promise<Page> {
-  const ctx = await browser.newContext();
-  const page = await ctx.newPage();
-  if (opts.noMic) {
-    await page.addInitScript(() => {
-      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('', 'NotAllowedError'));
-    });
-  }
-  page.on('console', (m) => m.type() === 'warning' && console.log(`[${hash.slice(1, 6)}] ${m.text()}`));
-  await page.goto('/' + hash);
-  await expect(page.locator('#lobby')).toBeVisible();
-  await expect(page.locator('#start')).toBeHidden();
-  await expect(page.locator('#call')).toBeHidden();
-  return page;
-}
-
-async function join(page: Page, name: string): Promise<void> {
-  await page.fill('#name', name);
-  await page.click('#join');
-  await expect(page.locator('#call')).toBeVisible();
-  await expect(page.locator('#lobby')).toBeHidden();
-}
-
-const connected = (page: Page) =>
-  page.evaluate(() => (window.plaudr?.peers() ?? []).filter((p) => p.state === 'connected').length);
-const peerCount = (page: Page) => page.evaluate(() => window.plaudr?.peers().length ?? 0);
-const bytes = (page: Page) => page.evaluate(() => window.plaudr!.bytesReceived());
-
-async function expectMesh(pages: Page[], n: number): Promise<void> {
-  for (const p of pages) {
-    await expect.poll(() => connected(p), { timeout: 15_000 }).toBe(n);
-    await expect.poll(() => peerCount(p)).toBe(n);
-  }
-}
-
-async function expectAudioFlowing(pages: Page[]): Promise<void> {
-  const before = await Promise.all(pages.map(bytes));
-  for (const b of before) for (const v of Object.values(b)) expect(v).toBeGreaterThan(0);
-  await pages[0].waitForTimeout(2000);
-  const after = await Promise.all(pages.map(bytes));
-  pages.forEach((_, i) => {
-    for (const [peer, v] of Object.entries(before[i])) expect(after[i][peer]).toBeGreaterThan(v);
-  });
-}
+test.afterEach(closeContexts);
 
 test('drei Teilnehmer hören sich', async ({ browser }) => {
   const h = roomHash('drei');

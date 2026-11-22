@@ -32,6 +32,7 @@ export interface SignalingOptions {
 
 const MAX_SKEW_MS = 120_000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
+const CLOSE_FLUSH_MS = 1000;
 const KINDS: ReadonlySet<string> = new Set<Kind>(['hello', 'offer', 'answer', 'ice', 'bye']);
 
 class Rejected {
@@ -103,7 +104,9 @@ export class Signaling {
     await Promise.all([this.sendQueue, this.recvQueue]);
   }
 
-  close(): void {
+  /** Veröffentlicht noch Eingereihtes (etwa das bye), höchstens CLOSE_FLUSH_MS lang, und trennt dann. */
+  async close(): Promise<void> {
+    await Promise.race([this.sendQueue, new Promise((r) => setTimeout(r, CLOSE_FLUSH_MS))]);
     this.o.drone.close();
   }
 
