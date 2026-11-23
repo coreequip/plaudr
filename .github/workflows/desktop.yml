@@ -24,9 +24,10 @@ jobs:
         include:
           # macOS 15 statt neuer: Das DMG-Bundling scheitert auf macOS 27 (hdiutil create veraltet).
           - runner: macos-15
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin --bundles app,dmg
-            bundle-dir: desktop/src-tauri/target/universal-apple-darwin/release/bundle
+            # Nur Apple Silicon: macOS 26 ist die letzte Version für Intel-Macs, dort bleibt der Browser.
+            rust-targets: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+            bundle-dir: desktop/src-tauri/target/aarch64-apple-darwin/release/bundle
           - runner: windows-latest
             rust-targets: x86_64-pc-windows-msvc
             args: --bundles nsis
@@ -138,9 +139,7 @@ jobs:
           prerelease: false
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
 
-      # Grenze 5 MB (5 000 000 Bytes). Das Universal-.app enthält beide Architekturen und ist daher
-      # etwa doppelt so groß; geprüft wird das .app so, wie es auf einem Mac je Architektur ankommt
-      # (ohne die jeweils andere Hälfte der Binärdatei), dazu der Download (DMG bzw. Installer).
+      # Grenze 5 MB (5 000 000 Bytes) für das .app, den Download (DMG bzw. Installer) und die Update-Artefakte.
       - name: Größenprüfung
         env:
           BUNDLE_DIR: ${{ matrix.bundle-dir }}
@@ -168,15 +167,7 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           if [ "$RUNNER_OS" = "macOS" ]; then
             app="$BUNDLE_DIR/macos/plaudr.app"
-            bin="$app/Contents/MacOS/plaudr"
-            total=$(bytes "$app")
-            fat=$(wc -c < "$bin" | tr -d ' ')
-            printf '%-40s %10s Bytes\n' "plaudr.app (universal)" "$total" | tee -a "$GITHUB_STEP_SUMMARY"
-            for arch in $(lipo -archs "$bin"); do
-              lipo "$bin" -thin "$arch" -output "$RUNNER_TEMP/plaudr-$arch"
-              slice=$(wc -c < "$RUNNER_TEMP/plaudr-$arch" | tr -d ' ')
-              check "plaudr.app ($arch)" $((total - fat + slice))
-            done
+            check "plaudr.app" "$(bytes "$app")"
             files "$BUNDLE_DIR/dmg/*.dmg"
             if [ "$UPDATER" = 1 ]; then
               files "$BUNDLE_DIR/macos/*.app.tar.gz"

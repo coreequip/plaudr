@@ -57,7 +57,7 @@ für den Benutzer ein. Ein zweiter Start reicht Link und Argumente an die laufen
 
 Prüfpunkte von Hand (Handprobe auf echten Systemen): [docs/m4-handprobe.md](docs/m4-handprobe.md).
 
-Release-Builds baut der GitHub-Workflow „Desktop“: macOS als Universal-DMG (signiert und notarisiert, wenn
+Release-Builds baut der GitHub-Workflow „Desktop“: macOS als DMG für Apple Silicon (signiert und notarisiert, wenn
 die Apple-Secrets gesetzt sind, sonst ad-hoc), Windows als NSIS-Installer (unsigniert, SmartScreen warnt).
 Er läuft bei einem Tag `desktop-v<Version>` oder von Hand; gewöhnliche Pushes lösen ihn nicht aus. Die
 Artefakte eines Laufs lädst du über die Actions-Seite oder `gh run download <Lauf-ID>`. Die App

@@ -276,10 +276,10 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
 - Bündelt den Build aus `web/` und lädt nie die Live-Seite: Der Code der App kann
   dann nicht serverseitig ausgetauscht werden.
 - Release-Profil auf Größe optimiert (`opt-level = "z"`, `lto`, `codegen-units = 1`,
-  `panic = "abort"`, `strip`). Mit `"s"` lag nach dem Updater die x86_64-Hälfte über 5 MB. Das Limit
-  von 5 MB gilt je Architektur: Das Universal-Bündel (knapp 8 MB) enthält die Binärdatei doppelt, CI
-  prüft deshalb jede Hälfte einzeln. Gemessen im CI-Lauf mit Updater: `.app` x86_64 4,52 MB,
-  arm64 3,61 MB, DMG 4,24 MB, `plaudr.exe` 4,13 MB, NSIS-Installer 1,62 MB.
+  `panic = "abort"`, `strip`). Gemessen im CI-Lauf mit Updater: `.app` 3,61 MB,
+  `plaudr.exe` 4,13 MB, NSIS-Installer 1,62 MB.
+- macOS nur für Apple Silicon. macOS 26 ist die letzte Version für Intel-Macs, dort bleibt der Browser.
+  Ein Universal-Bündel hätte den Download verdoppelt, und die x86_64-Hälfte lag mit 4,52 MB nahe an 5 MB.
 - Zusätze gegenüber dem Browser:
   - globale PTT-Taste über `tauri-plugin-global-shortcut` (Pressed/Released-Ereignisse),
     frei belegbar

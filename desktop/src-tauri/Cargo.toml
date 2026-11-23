@@ -37,7 +37,7 @@ tauri-plugin-updater = { version = "=2.14.1", default-features = false, features
 
 [profile.release]
 # Auf Größe optimiert, siehe docs/spike-desktop.md. "z" statt "s", seit der Updater dazukam: Mit "s" lag
-# das .app für x86_64 über 5 MB. Rust treibt hier nur Fenster, Tray und Plugins, der Ton läuft in der WebView.
+# das .app für x86_64 (damals noch gebaut) über 5 MB. Rust treibt hier nur Fenster, Tray und Plugins, der Ton läuft in der WebView.
 opt-level = "z"
 lto = true
 codegen-units = 1

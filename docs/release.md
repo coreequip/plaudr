@@ -1,13 +1,13 @@
 # Release der Desktop-App
 
 Die Desktop-App baut der Workflow `.github/workflows/desktop.yml` („Desktop“) auf GitHub Actions: macOS auf
-`macos-15` als Universal-Bündel (Apple Silicon und Intel), Windows auf `windows-latest` als NSIS-Installer.
+`macos-15` nur für Apple Silicon (Intel-Macs nutzen den Browser), Windows auf `windows-latest` als NSIS-Installer.
 Er läuft nie bei einem gewöhnlichen Push auf `main`, sondern nur in zwei Fällen:
 
 - **Release-Tag `desktop-v<Version>`**, etwa `desktop-v0.1.0`. Die Version im Tag muss zu `version` in
   `desktop/src-tauri/tauri.conf.json` passen, sonst bricht der Lauf ab. Ergebnis ist ein Release-Entwurf
-  „plaudr <Version>“ mit `plaudr_<Version>_universal.dmg`, `plaudr_<Version>_universal.app.tar.gz`,
-  `plaudr_<Version>_x64-setup.exe`, den Update-Signaturen `plaudr_<Version>_universal.app.tar.gz.sig` und
+  „plaudr <Version>“ mit `plaudr_<Version>_aarch64.dmg`, `plaudr_<Version>_aarch64.app.tar.gz`,
+  `plaudr_<Version>_x64-setup.exe`, den Update-Signaturen `plaudr_<Version>_aarch64.app.tar.gz.sig` und
   `plaudr_<Version>_x64-setup.exe.sig` sowie `latest.json` (siehe [Updates](#updates)). Den Entwurf prüfst
   du und veröffentlichst ihn von Hand; erst dann bekommen die installierten Apps das Update.
 - **Von Hand** unter Actions › Desktop › „Run workflow“ (oder `gh workflow run desktop.yml`). Dann wird nur
@@ -25,25 +25,20 @@ Er läuft nie bei einem gewöhnlichen Push auf `main`, sondern nur in zwei Fäll
 ## Größenprüfung
 
 Der Schritt „Größenprüfung“ schlägt fehl, sobald eine Datei über 5 MB (5 000 000 Bytes) liegt. Geprüft
-werden unter macOS das `.app` je Architektur (das Universal-Bündel enthält die Binärdatei doppelt und ist
-deshalb etwa 7,6 MiB groß; maßgeblich ist, was ohne die jeweils andere Hälfte übrig bleibt), das DMG und,
+werden unter macOS das `.app`, das DMG und,
 mit Update-Artefakten, `.app.tar.gz` und `.sig`, unter Windows `plaudr.exe`, der Installer und seine `.sig`.
-Die Zusammenfassung des Laufs zeigt alle Werte, dazu das Universal-Bündel und die Entitlements der Signatur.
+Die Zusammenfassung des Laufs zeigt alle Werte, dazu die Entitlements der Signatur.
 
 Gemessen im CI-Lauf vom 23.11.2026 (Version 0.1.0, Rust 1.98, mit Updater, `opt-level = "z"`, macOS
-ad-hoc signiert):
+ad-hoc signiert, damals noch als Universal-Bündel). Der Apple-Silicon-Teil allein:
 
 | Datei | Größe |
 |---|---|
-| `plaudr.app`, universal | 8 019 749 Bytes |
-| `plaudr.app`, nur x86_64 | 4 523 893 Bytes |
-| `plaudr.app`, nur arm64 | 3 612 453 Bytes |
-| `plaudr_<Version>_universal.dmg` | 4 243 286 Bytes |
-| `plaudr.app.tar.gz`, universal (Update-Artefakt) | 4 251 675 Bytes |
+| `plaudr.app` (arm64) | 3 612 453 Bytes |
 | `plaudr.exe` | 4 133 888 Bytes |
 | `plaudr_<Version>_x64-setup.exe` | 1 624 474 Bytes |
 
-Am knappsten ist die x86_64-Hälfte mit gut 0,47 MB Luft bis zur Grenze.
+DMG und Update-Archiv waren als Universal-Bündel je etwa 4,2 MB groß, nur für Apple Silicon sind sie kleiner.
 
 ## Updates
 
@@ -64,7 +59,7 @@ lässt den Entwurf einfach liegen.
 
 **Vor dem Veröffentlichen `latest.json` im Entwurf ansehen.** Beide Jobs (macOS und Windows) laden die
 Datei, tragen ihre Plattform ein und laden sie wieder hoch. Laufen sie zufällig gleichzeitig, kann der
-Eintrag des einen fehlen: Es müssen `darwin-aarch64`, `darwin-x86_64` und `windows-x86_64` drinstehen. Fehlt
+Eintrag des einen fehlen: Es müssen `darwin-aarch64` und `windows-x86_64` drinstehen. Fehlt
 einer, den Job dieser Plattform neu starten („Re-run job“), er ergänzt seinen Eintrag.
 
 ### Signaturschlüssel

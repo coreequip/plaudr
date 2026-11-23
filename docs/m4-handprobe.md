@@ -131,9 +131,9 @@ läuft ebenfalls mit Hardened Runtime und Entitlements und ist ein guter Vortest
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
 |---|---|---|---|---|
-| 49 | macOS | `plaudr_<Version>_universal.dmg` öffnen, App in „Programme“ ziehen, starten | signiert: startet ohne Gatekeeper-Warnung (`spctl -a -vv /Applications/plaudr.app` meldet „Notarized Developer ID“); ad-hoc: erst nach `xattr -dr com.apple.quarantine` | |
+| 49 | macOS | `plaudr_<Version>_aarch64.dmg` öffnen, App in „Programme“ ziehen, starten | signiert: startet ohne Gatekeeper-Warnung (`spctl -a -vv /Applications/plaudr.app` meldet „Notarized Developer ID“); ad-hoc: erst nach `xattr -dr com.apple.quarantine` | |
 | 50 | macOS | Raum betreten, Gespräch gegen den Browser-Tab | Mikrofonabfrage einmal, das Gegenüber hört dich (Entitlement `com.apple.security.device.audio-input` wirkt) | |
-| 51 | macOS | Intel-Mac oder `arch -x86_64 /Applications/plaudr.app/Contents/MacOS/plaudr` | App läuft auch als x86_64 (Universal-Bündel) | |
+| 51 | macOS | entfällt (kein Intel-Build mehr) | | |
 | 52 | Windows | `plaudr_<Version>_x64-setup.exe` ausführen | SmartScreen warnt („Der Computer wurde durch Windows geschützt“), über „Weitere Informationen“ › „Trotzdem ausführen“ geht es weiter; Installation ohne Adminrechte, Eintrag im Startmenü | |
 | 53 | Windows | Installation auf einem Rechner ohne WebView2-Runtime (etwa Windows 10 ohne Edge-Update) | Installer lädt die Runtime nach (Bootstrapper), danach startet plaudr | |
 | 54 | Windows | Punkte 7 bis 9 und 41 mit der installierten App | wie dort; `plaudr://` ist nach dem ersten Start eingetragen | |
@@ -148,7 +148,7 @@ taggen, Entwurf veröffentlichen, 0.1.0 auf beiden Systemen installieren; dann V
 
 | # | Plattform | Prüfung | Erwartung | Ergebnis |
 |---|---|---|---|---|
-| 56 | beide | Release-Entwurf 0.1.1 ansehen | enthält `latest.json` mit `version` 0.1.1 und den Plattformen `darwin-aarch64`, `darwin-x86_64`, `windows-x86_64`; je eine `.sig` zu `.app.tar.gz` und `-setup.exe` | |
+| 56 | beide | Release-Entwurf 0.1.1 ansehen | enthält `latest.json` mit `version` 0.1.1 und den Plattformen `darwin-aarch64`, `windows-x86_64`; je eine `.sig` zu `.app.tar.gz` und `-setup.exe` | |
 | 57 | beide | 0.1.1 noch Entwurf; plaudr 0.1.0 starten | kein Hinweis auf dem Startbildschirm (`releases/latest` ist noch 0.1.0) | |
 | 58 | beide | Entwurf 0.1.1 veröffentlichen (nicht als Pre-Release), plaudr 0.1.0 neu starten | Startbildschirm zeigt „Neue Version 0.1.1 verfügbar.“ und „Jetzt aktualisieren“ | |
 | 59 | beide | wie 58, aber plaudr startet per Auto-Beitritt direkt ins Gespräch | im Gespräch kein Hinweis, nichts wird geladen; nach „Verlassen“ erscheint der Hinweis | |
