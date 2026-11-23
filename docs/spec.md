@@ -278,9 +278,8 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
 - Release-Profil auf Größe optimiert (`opt-level = "z"`, `lto`, `codegen-units = 1`,
   `panic = "abort"`, `strip`). Mit `"s"` lag nach dem Updater die x86_64-Hälfte über 5 MB. Das Limit
   von 5 MB gilt je Architektur: Das Universal-Bündel (knapp 8 MB) enthält die Binärdatei doppelt, CI
-  prüft deshalb jede Hälfte einzeln. Gemessen im ersten CI-Lauf (vor dem Updater): DMG 3,98 MiB,
-  `.app` gezippt 3,96 MiB, NSIS-Installer 1,5 MiB. Die Größe der Windows-`.exe` mit Updater ist noch
-  nicht neu gemessen.
+  prüft deshalb jede Hälfte einzeln. Gemessen im CI-Lauf mit Updater: `.app` x86_64 4,52 MB,
+  arm64 3,61 MB, DMG 4,24 MB, `plaudr.exe` 4,13 MB, NSIS-Installer 1,62 MB.
 - Zusätze gegenüber dem Browser:
   - globale PTT-Taste über `tauri-plugin-global-shortcut` (Pressed/Released-Ereignisse),
     frei belegbar

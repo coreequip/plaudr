@@ -30,17 +30,20 @@ deshalb etwa 7,6 MiB groß; maßgeblich ist, was ohne die jeweils andere Hälfte
 mit Update-Artefakten, `.app.tar.gz` und `.sig`, unter Windows `plaudr.exe`, der Installer und seine `.sig`.
 Die Zusammenfassung des Laufs zeigt alle Werte, dazu das Universal-Bündel und die Entitlements der Signatur.
 
-Gemessen lokal mit Version 0.1.0 (Rust 1.98.1, mit Updater, `opt-level = "z"`, ad-hoc signiert):
+Gemessen im CI-Lauf vom 23.11.2026 (Version 0.1.0, Rust 1.98, mit Updater, `opt-level = "z"`, macOS
+ad-hoc signiert):
 
 | Datei | Größe |
 |---|---|
-| `plaudr.app`, universal | 7 965 285 Bytes |
-| `plaudr.app`, nur x86_64 | 4 511 141 Bytes |
-| `plaudr.app`, nur arm64 | 3 574 373 Bytes |
-| `plaudr.app.tar.gz`, universal (Update-Artefakt) | 4 235 916 Bytes |
-| `plaudr.exe` (cargo-xwin, vor dem Updater) | 3 132 928 Bytes |
-| `plaudr_<Version>_universal.dmg` (CI, vor dem Updater) | 3,98 MiB |
-| `plaudr_<Version>_x64-setup.exe` (CI, vor dem Updater) | 1,5 MiB |
+| `plaudr.app`, universal | 8 019 749 Bytes |
+| `plaudr.app`, nur x86_64 | 4 523 893 Bytes |
+| `plaudr.app`, nur arm64 | 3 612 453 Bytes |
+| `plaudr_<Version>_universal.dmg` | 4 243 286 Bytes |
+| `plaudr.app.tar.gz`, universal (Update-Artefakt) | 4 251 675 Bytes |
+| `plaudr.exe` | 4 133 888 Bytes |
+| `plaudr_<Version>_x64-setup.exe` | 1 624 474 Bytes |
+
+Am knappsten ist die x86_64-Hälfte mit gut 0,47 MB Luft bis zur Grenze.
 
 ## Updates
 
