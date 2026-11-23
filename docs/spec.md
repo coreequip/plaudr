@@ -277,7 +277,7 @@ Tauri 3 ist zum Stand der Spec Alpha; Umstieg erst nach dem stabilen Release.
   dann nicht serverseitig ausgetauscht werden.
 - Release-Profil auf Größe optimiert (`opt-level = "z"`, `lto`, `codegen-units = 1`,
   `panic = "abort"`, `strip`). Gemessen im CI-Lauf mit Updater: `.app` 3,61 MB,
-  `plaudr.exe` 4,13 MB, NSIS-Installer 1,62 MB.
+  DMG 2,16 MB, `plaudr.exe` 4,13 MB, NSIS-Installer 1,62 MB.
 - macOS nur für Apple Silicon. macOS 26 ist die letzte Version für Intel-Macs, dort bleibt der Browser.
   Ein Universal-Bündel hätte den Download verdoppelt, und die x86_64-Hälfte lag mit 4,52 MB nahe an 5 MB.
 - Zusätze gegenüber dem Browser:

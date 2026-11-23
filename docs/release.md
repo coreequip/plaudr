@@ -30,15 +30,15 @@ mit Update-Artefakten, `.app.tar.gz` und `.sig`, unter Windows `plaudr.exe`, der
 Die Zusammenfassung des Laufs zeigt alle Werte, dazu die Entitlements der Signatur.
 
 Gemessen im CI-Lauf vom 23.11.2026 (Version 0.1.0, Rust 1.98, mit Updater, `opt-level = "z"`, macOS
-ad-hoc signiert, damals noch als Universal-Bündel). Der Apple-Silicon-Teil allein:
+ad-hoc signiert):
 
 | Datei | Größe |
 |---|---|
 | `plaudr.app` (arm64) | 3 612 453 Bytes |
+| `plaudr_<Version>_aarch64.dmg` | 2 158 443 Bytes |
+| `plaudr.app.tar.gz` (Update-Artefakt) | 2 124 557 Bytes |
 | `plaudr.exe` | 4 133 888 Bytes |
-| `plaudr_<Version>_x64-setup.exe` | 1 624 474 Bytes |
-
-DMG und Update-Archiv waren als Universal-Bündel je etwa 4,2 MB groß, nur für Apple Silicon sind sie kleiner.
+| `plaudr_<Version>_x64-setup.exe` | 1 624 169 Bytes |
 
 ## Updates
 
